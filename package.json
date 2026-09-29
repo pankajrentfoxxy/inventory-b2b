@@ -1,0 +1,26 @@
+{
+  "name": "b2b-inventory",
+  "private": true,
+  "version": "0.1.0",
+  "description": "B2B multi-tenant inventory management (Rentfoxxy)",
+  "engines": { "node": ">=22.0.0" },
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @b2b/api\" \"npm run dev -w @b2b/web\"",
+    "dev:api": "npm run dev -w @b2b/api",
+    "dev:web": "npm run dev -w @b2b/web",
+    "build": "npm run build -w @b2b/api && npm run build -w @b2b/web",
+    "typecheck": "npm run typecheck -w @b2b/shared && npm run typecheck -w @b2b/api && npm run typecheck -w @b2b/web",
+    "test": "npm run test -w @b2b/api",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run db:migrate -w @b2b/api",
+    "db:seed": "npm run db:seed -w @b2b/api",
+    "db:reset": "npm run db:reset -w @b2b/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2"
+  }
+}

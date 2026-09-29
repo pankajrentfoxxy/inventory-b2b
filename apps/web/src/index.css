@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-size: 14px;
+  }
+  body {
+    @apply bg-slate-50 text-slate-900;
+  }
+  /* Consistent focus ring for keyboard users across every interactive control. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500/60 ring-offset-1 ring-offset-white;
+  }
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+@layer components {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}

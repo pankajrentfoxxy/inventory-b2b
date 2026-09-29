@@ -1,0 +1,909 @@
+// B2B Inventory - PostgreSQL schema.
+// Every business row carries organization_id; repositories filter on it unconditionally.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/* ============================================================
+ * Tenancy, users, RBAC
+ * ============================================================ */
+
+model Organization {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(150)
+  slug         String   @unique @db.VarChar(80)
+  gstin        String?  @db.VarChar(15)
+  countryCode  String   @default("IN") @map("country_code") @db.VarChar(2)
+  baseCurrency String   @default("INR") @map("base_currency") @db.VarChar(3)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  members                OrganizationMember[]
+  roles                  Role[]
+  gstTreatments          GstTreatment[]
+  sourcesOfSupply        SourceOfSupply[]
+  paymentTerms           PaymentTerm[]
+  customFieldDefinitions CustomFieldDefinition[]
+  reportingTags          ReportingTag[]
+  vendors                Vendor[]
+  locations              Location[]
+  taxes                  Tax[]
+  items                  Item[]
+  documentSequences      DocumentSequence[]
+  purchaseOrders         PurchaseOrder[]
+  purchaseReceives       PurchaseReceive[]
+
+  @@map("organizations")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique @db.VarChar(254)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  name         String   @db.VarChar(100)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  memberships OrganizationMember[]
+
+  @@map("users")
+}
+
+model Permission {
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique @db.VarChar(80)
+  module      String  @db.VarChar(40)
+  description String? @db.VarChar(255)
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model Role {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  code           String   @db.VarChar(50)
+  name           String   @db.VarChar(100)
+  description    String?  @db.VarChar(255)
+  isSystem       Boolean  @default(false) @map("is_system")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissions  RolePermission[]
+  members      OrganizationMember[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("roles")
+}
+
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+enum MemberStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+model OrganizationMember {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  roleId         String       @map("role_id") @db.Uuid
+  isOwner        Boolean      @default(false) @map("is_owner")
+  status         MemberStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+/* ============================================================
+ * Organization-scoped masters used by vendors
+ * ============================================================ */
+
+model GstTreatment {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  code           String   @db.VarChar(50)
+  name           String   @db.VarChar(100)
+  description    String?  @db.VarChar(255)
+  requiresGstin  Boolean  @default(false) @map("requires_gstin")
+  isActive       Boolean  @default(true) @map("is_active")
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendors      Vendor[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, isActive])
+  @@map("gst_treatments")
+}
+
+/// Place / source of supply (Indian states + UTs by default; extendable per organization).
+model SourceOfSupply {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  code           String   @db.VarChar(10)
+  shortCode      String?  @map("short_code") @db.VarChar(5)
+  name           String   @db.VarChar(100)
+  countryCode    String   @default("IN") @map("country_code") @db.VarChar(2)
+  isActive       Boolean  @default(true) @map("is_active")
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendors      Vendor[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, isActive])
+  @@map("sources_of_supply")
+}
+
+model PaymentTerm {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String   @db.VarChar(100)
+  days           Int      @default(0)
+  isDefault      Boolean  @default(false) @map("is_default")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendors        Vendor[]
+  purchaseOrders PurchaseOrder[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
+  @@map("payment_terms")
+}
+
+/// ISO currencies; global reference data.
+model Currency {
+  code      String   @id @db.VarChar(3)
+  name      String   @db.VarChar(60)
+  symbol    String   @db.VarChar(8)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  vendors Vendor[]
+
+  @@map("currencies")
+}
+
+enum CustomFieldEntity {
+  VENDOR
+  PURCHASE_ORDER
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  DROPDOWN
+  BOOLEAN
+}
+
+/// Admin-configurable extra fields. Values live in *_custom_field_values, never as schema columns.
+model CustomFieldDefinition {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  entityType     CustomFieldEntity @default(VENDOR) @map("entity_type")
+  key            String            @db.VarChar(60)
+  label          String            @db.VarChar(100)
+  fieldType      CustomFieldType   @map("field_type")
+  options        Json?
+  isRequired     Boolean           @default(false) @map("is_required")
+  isActive       Boolean           @default(true) @map("is_active")
+  sortOrder      Int               @default(0) @map("sort_order")
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization        Organization                    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendorValues        VendorCustomFieldValue[]
+  purchaseOrderValues PurchaseOrderCustomFieldValue[]
+
+  @@unique([organizationId, entityType, key])
+  @@index([organizationId, entityType, isActive])
+  @@map("custom_field_definitions")
+}
+
+model ReportingTag {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String   @db.VarChar(100)
+  isActive       Boolean  @default(true) @map("is_active")
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  options      ReportingTagOption[]
+  vendorTags   VendorReportingTag[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
+  @@map("reporting_tags")
+}
+
+model ReportingTagOption {
+  id        String   @id @default(uuid()) @db.Uuid
+  tagId     String   @map("tag_id") @db.Uuid
+  name      String   @db.VarChar(100)
+  isActive  Boolean  @default(true) @map("is_active")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tag        ReportingTag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  vendorTags VendorReportingTag[]
+
+  @@unique([tagId, name])
+  @@map("reporting_tag_options")
+}
+
+/* ============================================================
+ * Vendor aggregate
+ * ============================================================ */
+
+enum VendorStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum VendorType {
+  SUPPLIER
+  MANUFACTURER
+  SERVICE_PROVIDER
+  CONTRACTOR
+  OTHER
+}
+
+model Vendor {
+  id                   String       @id @default(uuid()) @db.Uuid
+  organizationId       String       @map("organization_id") @db.Uuid
+  displayName          String       @map("display_name") @db.VarChar(200)
+  companyName          String?      @map("company_name") @db.VarChar(200)
+  salutation           String?      @db.VarChar(10)
+  firstName            String?      @map("first_name") @db.VarChar(100)
+  lastName             String?      @map("last_name") @db.VarChar(100)
+  email                String?      @db.VarChar(254)
+  workPhoneCountryCode String?      @map("work_phone_country_code") @db.VarChar(5)
+  workPhone            String?      @map("work_phone") @db.VarChar(20)
+  mobileCountryCode    String?      @map("mobile_country_code") @db.VarChar(5)
+  mobile               String?      @db.VarChar(20)
+  language             String       @default("en") @db.VarChar(10)
+  website              String?      @db.VarChar(255)
+  gstTreatmentId       String?      @map("gst_treatment_id") @db.Uuid
+  sourceOfSupplyId     String?      @map("source_of_supply_id") @db.Uuid
+  gstin                String?      @db.VarChar(15)
+  pan                  String?      @db.VarChar(10)
+  paymentTermId        String?      @map("payment_term_id") @db.Uuid
+  currencyCode         String       @default("INR") @map("currency_code") @db.VarChar(3)
+  vendorType           VendorType?  @map("vendor_type")
+  msmeRegistered       Boolean      @default(false) @map("msme_registered")
+  msmeNumber           String?      @map("msme_number") @db.VarChar(30)
+  tdsApplicable        Boolean      @default(false) @map("tds_applicable")
+  tdsSectionCode       String?      @map("tds_section_code") @db.VarChar(20)
+  tcsApplicable        Boolean      @default(false) @map("tcs_applicable")
+  taxConfig            Json         @default("{}") @map("tax_config")
+  openingBalance       Decimal?     @map("opening_balance") @db.Decimal(18, 2)
+  status               VendorStatus @default(ACTIVE)
+  remarks              String?
+  deletedAt            DateTime?    @map("deleted_at") @db.Timestamptz(6)
+  createdAt            DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdById          String?      @map("created_by") @db.Uuid
+  updatedById          String?      @map("updated_by") @db.Uuid
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  gstTreatment   GstTreatment?   @relation(fields: [gstTreatmentId], references: [id], onDelete: SetNull)
+  sourceOfSupply SourceOfSupply? @relation(fields: [sourceOfSupplyId], references: [id], onDelete: SetNull)
+  paymentTerm    PaymentTerm?    @relation(fields: [paymentTermId], references: [id], onDelete: SetNull)
+  currency       Currency        @relation(fields: [currencyCode], references: [code])
+
+  addresses     VendorAddress[]
+  contacts      VendorContact[]
+  bankAccounts  VendorBankAccount[]
+  customFields  VendorCustomFieldValue[]
+  reportingTags VendorReportingTag[]
+  documents     VendorDocument[]
+  notes         VendorNote[]
+  activities    VendorActivity[]
+  preferredForItems Item[]
+  purchaseOrders    PurchaseOrder[]
+  purchaseReceives  PurchaseReceive[]
+
+  // Uniqueness of (organization_id, lower(display_name)) for live rows is a partial
+  // index in the migration; Prisma cannot express it declaratively.
+  @@index([organizationId])
+  @@index([organizationId, displayName])
+  @@index([organizationId, companyName])
+  @@index([organizationId, email])
+  @@index([organizationId, workPhone])
+  @@index([organizationId, mobile])
+  @@index([organizationId, gstin])
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+  @@map("vendors")
+}
+
+enum AddressType {
+  BILLING
+  SHIPPING
+}
+
+model VendorAddress {
+  id             String      @id @default(uuid()) @db.Uuid
+  vendorId       String      @map("vendor_id") @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  type           AddressType
+  attention      String?     @db.VarChar(120)
+  countryCode    String      @default("IN") @map("country_code") @db.VarChar(2)
+  addressLine1   String?     @map("address_line1") @db.VarChar(255)
+  addressLine2   String?     @map("address_line2") @db.VarChar(255)
+  city           String?     @db.VarChar(120)
+  state          String?     @db.VarChar(120)
+  stateCode      String?     @map("state_code") @db.VarChar(5)
+  postalCode     String?     @map("postal_code") @db.VarChar(20)
+  phone          String?     @db.VarChar(20)
+  fax            String?     @db.VarChar(30)
+  isPrimary      Boolean     @default(false) @map("is_primary")
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@index([organizationId])
+  @@map("vendor_addresses")
+}
+
+model VendorContact {
+  id             String   @id @default(uuid()) @db.Uuid
+  vendorId       String   @map("vendor_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  salutation     String?  @db.VarChar(10)
+  firstName      String   @map("first_name") @db.VarChar(100)
+  lastName       String?  @map("last_name") @db.VarChar(100)
+  email          String?  @db.VarChar(254)
+  workPhone      String?  @map("work_phone") @db.VarChar(20)
+  mobile         String?  @db.VarChar(20)
+  designation    String?  @db.VarChar(100)
+  department     String?  @db.VarChar(100)
+  isPrimary      Boolean  @default(false) @map("is_primary")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@index([organizationId])
+  @@map("vendor_contacts")
+}
+
+enum BankAccountType {
+  SAVINGS
+  CURRENT
+  CASH_CREDIT
+  OVERDRAFT
+  OTHER
+}
+
+/// Account numbers are stored AES-256-GCM encrypted; only the last 4 digits are stored in clear.
+model VendorBankAccount {
+  id                     String          @id @default(uuid()) @db.Uuid
+  vendorId               String          @map("vendor_id") @db.Uuid
+  organizationId         String          @map("organization_id") @db.Uuid
+  bankName               String          @map("bank_name") @db.VarChar(150)
+  accountHolderName      String          @map("account_holder_name") @db.VarChar(150)
+  accountNumberEncrypted String          @map("account_number_encrypted") @db.VarChar(255)
+  accountNumberLast4     String          @map("account_number_last4") @db.VarChar(4)
+  ifsc                   String          @db.VarChar(11)
+  branch                 String?         @db.VarChar(150)
+  accountType            BankAccountType @default(CURRENT) @map("account_type")
+  isPrimary              Boolean         @default(false) @map("is_primary")
+  createdAt              DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@index([organizationId])
+  @@map("vendor_bank_accounts")
+}
+
+model VendorCustomFieldValue {
+  id             String   @id @default(uuid()) @db.Uuid
+  vendorId       String   @map("vendor_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  fieldId        String   @map("field_id") @db.Uuid
+  value          Json?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  vendor Vendor                @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  field  CustomFieldDefinition @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([vendorId, fieldId])
+  @@index([organizationId])
+  @@map("vendor_custom_field_values")
+}
+
+model VendorReportingTag {
+  id             String   @id @default(uuid()) @db.Uuid
+  vendorId       String   @map("vendor_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  tagId          String   @map("tag_id") @db.Uuid
+  optionId       String   @map("option_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  vendor Vendor             @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  tag    ReportingTag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  option ReportingTagOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([vendorId, tagId])
+  @@index([organizationId, optionId])
+  @@map("vendor_reporting_tags")
+}
+
+model VendorDocument {
+  id             String   @id @default(uuid()) @db.Uuid
+  vendorId       String   @map("vendor_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  fileName       String   @map("file_name") @db.VarChar(255)
+  mimeType       String   @map("mime_type") @db.VarChar(120)
+  sizeBytes      Int      @map("size_bytes")
+  storageKey     String   @map("storage_key") @db.VarChar(400)
+  uploadedById   String?  @map("uploaded_by") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@index([organizationId])
+  @@map("vendor_documents")
+}
+
+model VendorNote {
+  id             String   @id @default(uuid()) @db.Uuid
+  vendorId       String   @map("vendor_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  body           String
+  createdById    String?  @map("created_by") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId, createdAt])
+  @@index([organizationId])
+  @@map("vendor_notes")
+}
+
+/// Append-only audit trail. old_value / new_value hold field-level diffs with sensitive data masked.
+model VendorActivity {
+  id             String   @id @default(uuid()) @db.Uuid
+  vendorId       String   @map("vendor_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  action         String   @db.VarChar(60)
+  entityType     String   @map("entity_type") @db.VarChar(40)
+  entityId       String?  @map("entity_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  userName       String?  @map("user_name") @db.VarChar(100)
+  summary        String?  @db.VarChar(500)
+  oldValue       Json?    @map("old_value")
+  newValue       Json?    @map("new_value")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("vendor_activities")
+}
+
+/* ============================================================
+ * Purchasing masters: locations (warehouses), taxes, numbering
+ * ============================================================ */
+
+enum LocationType {
+  WAREHOUSE
+  OFFICE
+  STORE
+  OTHER
+}
+
+/// Organization warehouses / offices. Used as PO "Location" and delivery address.
+model Location {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  name           String       @db.VarChar(120)
+  type           LocationType @default(WAREHOUSE)
+  attention      String?      @db.VarChar(120)
+  addressLine1   String?      @map("address_line1") @db.VarChar(255)
+  addressLine2   String?      @map("address_line2") @db.VarChar(255)
+  city           String?      @db.VarChar(120)
+  state          String?      @db.VarChar(120)
+  stateCode      String?      @map("state_code") @db.VarChar(5)
+  postalCode     String?      @map("postal_code") @db.VarChar(20)
+  countryCode    String       @default("IN") @map("country_code") @db.VarChar(2)
+  phone          String?      @db.VarChar(20)
+  email          String?      @db.VarChar(254)
+  gstin          String?      @db.VarChar(15)
+  isPrimary      Boolean      @default(false) @map("is_primary")
+  isActive       Boolean      @default(true) @map("is_active")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  purchaseOrders    PurchaseOrder[]   @relation("PurchaseOrderLocation")
+  deliveryForOrders PurchaseOrder[]   @relation("PurchaseOrderDeliveryLocation")
+  purchaseReceives  PurchaseReceive[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
+  @@map("locations")
+}
+
+/// GST rate master (GST0 .. GST28). Intra/inter-state split is computed per transaction.
+model Tax {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String   @db.VarChar(50)
+  rate           Decimal  @db.Decimal(5, 2)
+  isDefault      Boolean  @default(false) @map("is_default")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items        Item[]
+  lines        PurchaseOrderLine[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
+  @@map("taxes")
+}
+
+enum DocumentType {
+  PURCHASE_ORDER
+  PURCHASE_RECEIVE
+}
+
+/// Per-organization auto-numbering (PO-00001). Rows are locked FOR UPDATE inside the create transaction.
+model DocumentSequence {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  docType        DocumentType @map("doc_type")
+  prefix         String       @default("") @db.VarChar(20)
+  nextNumber     Int          @default(1) @map("next_number")
+  padding        Int          @default(5)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, docType])
+  @@map("document_sequences")
+}
+
+/* ============================================================
+ * Items (item master, minimal for purchasing)
+ * ============================================================ */
+
+enum ItemType {
+  GOODS
+  SERVICE
+}
+
+model Item {
+  id                String    @id @default(uuid()) @db.Uuid
+  organizationId    String    @map("organization_id") @db.Uuid
+  name              String    @db.VarChar(200)
+  sku               String?   @db.VarChar(60)
+  type              ItemType  @default(GOODS)
+  unit              String    @default("pcs") @db.VarChar(20)
+  description       String?
+  hsnCode           String?   @map("hsn_code") @db.VarChar(8)
+  purchaseRate      Decimal?  @map("purchase_rate") @db.Decimal(18, 4)
+  sellingRate       Decimal?  @map("selling_rate") @db.Decimal(18, 4)
+  taxId             String?   @map("tax_id") @db.Uuid
+  preferredVendorId String?   @map("preferred_vendor_id") @db.Uuid
+  trackInventory    Boolean   @default(true) @map("track_inventory")
+  reorderLevel      Decimal?  @map("reorder_level") @db.Decimal(18, 3)
+  isActive          Boolean   @default(true) @map("is_active")
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdById       String?   @map("created_by") @db.Uuid
+  updatedById       String?   @map("updated_by") @db.Uuid
+
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tax             Tax?                  @relation(fields: [taxId], references: [id], onDelete: SetNull)
+  preferredVendor Vendor?               @relation(fields: [preferredVendorId], references: [id], onDelete: SetNull)
+  poLines         PurchaseOrderLine[]
+  receiveLines    PurchaseReceiveLine[]
+
+  // UNIQUE (organization_id, upper(sku)) WHERE deleted_at IS NULL AND sku IS NOT NULL lives in the migration.
+  @@index([organizationId])
+  @@index([organizationId, name])
+  @@index([organizationId, sku])
+  @@index([organizationId, isActive])
+  @@map("items")
+}
+
+/* ============================================================
+ * Purchase orders
+ * ============================================================ */
+
+enum PurchaseOrderStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CLOSED
+  CANCELLED
+}
+
+enum DiscountType {
+  PERCENT
+  AMOUNT
+}
+
+enum TaxDeductionType {
+  NONE
+  TDS
+  TCS
+}
+
+enum DeliveryAddressType {
+  LOCATION
+  CUSTOM
+}
+
+/// Header. Vendor and location are referenced by id; the delivery address is a snapshot
+/// because the printed document must not change when a warehouse address is edited later.
+model PurchaseOrder {
+  id                   String              @id @default(uuid()) @db.Uuid
+  organizationId       String              @map("organization_id") @db.Uuid
+  purchaseOrderNumber  String              @map("po_number") @db.VarChar(30)
+  vendorId             String              @map("vendor_id") @db.Uuid
+  locationId           String?             @map("location_id") @db.Uuid
+  deliveryType         DeliveryAddressType @default(LOCATION) @map("delivery_type")
+  deliveryLocationId   String?             @map("delivery_location_id") @db.Uuid
+  deliveryAddress      Json?               @map("delivery_address")
+  /// GST source of supply (vendor's state by default) and destination (delivery state by default).
+  sourceOfSupplyCode   String?             @map("source_of_supply_code") @db.VarChar(5)
+  placeOfSupplyCode    String?             @map("place_of_supply_code") @db.VarChar(5)
+  isIntraState         Boolean             @default(false) @map("is_intra_state")
+  referenceNumber      String?             @map("reference_number") @db.VarChar(60)
+  orderDate            DateTime            @map("order_date") @db.Date
+  expectedDeliveryDate DateTime?           @map("expected_delivery_date") @db.Date
+  paymentTermId        String?             @map("payment_term_id") @db.Uuid
+  shipmentPreference   String?             @map("shipment_preference") @db.VarChar(100)
+  status               PurchaseOrderStatus @default(DRAFT)
+  currencyCode         String              @default("INR") @map("currency_code") @db.VarChar(3)
+  discountType         DiscountType        @default(PERCENT) @map("discount_type")
+  discountValue        Decimal             @default(0) @map("discount_value") @db.Decimal(18, 4)
+  taxDeductionType     TaxDeductionType    @default(NONE) @map("tax_deduction_type")
+  taxDeductionRate     Decimal             @default(0) @map("tax_deduction_rate") @db.Decimal(6, 3)
+  taxDeductionLabel    String?             @map("tax_deduction_label") @db.VarChar(80)
+  adjustment           Decimal             @default(0) @db.Decimal(18, 2)
+  adjustmentLabel      String?             @map("adjustment_label") @db.VarChar(60)
+  subTotal             Decimal             @default(0) @map("sub_total") @db.Decimal(18, 2)
+  discountAmount       Decimal             @default(0) @map("discount_amount") @db.Decimal(18, 2)
+  taxTotal             Decimal             @default(0) @map("tax_total") @db.Decimal(18, 2)
+  taxBreakup           Json                @default("[]") @map("tax_breakup")
+  taxDeductionAmount   Decimal             @default(0) @map("tax_deduction_amount") @db.Decimal(18, 2)
+  total                Decimal             @default(0) @db.Decimal(18, 2)
+  notes                String?
+  terms                String?
+  issuedAt             DateTime?           @map("issued_at") @db.Timestamptz(6)
+  cancelledAt          DateTime?           @map("cancelled_at") @db.Timestamptz(6)
+  cancelReason         String?             @map("cancel_reason") @db.VarChar(500)
+  closedAt             DateTime?           @map("closed_at") @db.Timestamptz(6)
+  deletedAt            DateTime?           @map("deleted_at") @db.Timestamptz(6)
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdById          String?             @map("created_by") @db.Uuid
+  updatedById          String?             @map("updated_by") @db.Uuid
+
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor           Vendor       @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  location         Location?    @relation("PurchaseOrderLocation", fields: [locationId], references: [id], onDelete: SetNull)
+  deliveryLocation Location?    @relation("PurchaseOrderDeliveryLocation", fields: [deliveryLocationId], references: [id], onDelete: SetNull)
+  paymentTerm      PaymentTerm? @relation(fields: [paymentTermId], references: [id], onDelete: SetNull)
+
+  lines        PurchaseOrderLine[]
+  customFields PurchaseOrderCustomFieldValue[]
+  documents    PurchaseOrderDocument[]
+  activities   PurchaseOrderActivity[]
+  receives     PurchaseReceive[]
+
+  // UNIQUE (organization_id, lower(po_number)) WHERE deleted_at IS NULL lives in the migration.
+  @@index([organizationId, status])
+  @@index([organizationId, vendorId])
+  @@index([organizationId, orderDate])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, purchaseOrderNumber])
+  @@map("purchase_orders")
+}
+
+/// Line items snapshot the item name / HSN / tax rate at order time.
+model PurchaseOrderLine {
+  id               String   @id @default(uuid()) @db.Uuid
+  purchaseOrderId  String   @map("purchase_order_id") @db.Uuid
+  organizationId   String   @map("organization_id") @db.Uuid
+  lineNumber       Int      @map("line_number")
+  itemId           String?  @map("item_id") @db.Uuid
+  name             String   @db.VarChar(200)
+  sku              String?  @db.VarChar(60)
+  description      String?
+  hsnCode          String?  @map("hsn_code") @db.VarChar(8)
+  quantity         Decimal  @db.Decimal(18, 3)
+  unit             String?  @db.VarChar(20)
+  rate             Decimal  @db.Decimal(18, 4)
+  taxId            String?  @map("tax_id") @db.Uuid
+  taxName          String?  @map("tax_name") @db.VarChar(50)
+  taxRate          Decimal  @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  amount           Decimal  @db.Decimal(18, 2)
+  taxableAmount    Decimal  @default(0) @map("taxable_amount") @db.Decimal(18, 2)
+  taxAmount        Decimal  @default(0) @map("tax_amount") @db.Decimal(18, 2)
+  total            Decimal  @default(0) @db.Decimal(18, 2)
+  receivedQuantity Decimal  @default(0) @map("received_quantity") @db.Decimal(18, 3)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  purchaseOrder PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  item          Item?                 @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  tax           Tax?                  @relation(fields: [taxId], references: [id], onDelete: SetNull)
+  receiveLines  PurchaseReceiveLine[]
+
+  @@index([purchaseOrderId])
+  @@index([organizationId, itemId])
+  @@map("purchase_order_lines")
+}
+
+model PurchaseOrderCustomFieldValue {
+  id              String   @id @default(uuid()) @db.Uuid
+  purchaseOrderId String   @map("purchase_order_id") @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  fieldId         String   @map("field_id") @db.Uuid
+  value           Json?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  purchaseOrder PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  field         CustomFieldDefinition @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([purchaseOrderId, fieldId])
+  @@index([organizationId])
+  @@map("purchase_order_custom_field_values")
+}
+
+model PurchaseOrderDocument {
+  id              String   @id @default(uuid()) @db.Uuid
+  purchaseOrderId String   @map("purchase_order_id") @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  fileName        String   @map("file_name") @db.VarChar(255)
+  mimeType        String   @map("mime_type") @db.VarChar(120)
+  sizeBytes       Int      @map("size_bytes")
+  storageKey      String   @map("storage_key") @db.VarChar(400)
+  uploadedById    String?  @map("uploaded_by") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+  @@index([organizationId])
+  @@map("purchase_order_documents")
+}
+
+model PurchaseOrderActivity {
+  id              String   @id @default(uuid()) @db.Uuid
+  purchaseOrderId String   @map("purchase_order_id") @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  action          String   @db.VarChar(60)
+  entityType      String   @map("entity_type") @db.VarChar(40)
+  entityId        String?  @map("entity_id") @db.Uuid
+  userId          String?  @map("user_id") @db.Uuid
+  userName        String?  @map("user_name") @db.VarChar(100)
+  summary         String?  @db.VarChar(500)
+  oldValue        Json?    @map("old_value")
+  newValue        Json?    @map("new_value")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("purchase_order_activities")
+}
+
+/* ============================================================
+ * Purchase receives (GRN)
+ * ============================================================ */
+
+enum PurchaseReceiveStatus {
+  RECEIVED
+  CANCELLED
+}
+
+model PurchaseReceive {
+  id              String                @id @default(uuid()) @db.Uuid
+  organizationId  String                @map("organization_id") @db.Uuid
+  purchaseOrderId String                @map("purchase_order_id") @db.Uuid
+  vendorId        String                @map("vendor_id") @db.Uuid
+  locationId      String?               @map("location_id") @db.Uuid
+  receiveNumber   String                @map("receive_number") @db.VarChar(30)
+  receivedDate    DateTime              @map("received_date") @db.Date
+  status          PurchaseReceiveStatus @default(RECEIVED)
+  notes           String?
+  totalQuantity   Decimal               @default(0) @map("total_quantity") @db.Decimal(18, 3)
+  cancelledAt     DateTime?             @map("cancelled_at") @db.Timestamptz(6)
+  cancelReason    String?               @map("cancel_reason") @db.VarChar(500)
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdById     String?               @map("created_by") @db.Uuid
+  createdByName   String?               @map("created_by_name") @db.VarChar(100)
+
+  organization  Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  vendor        Vendor                @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  location      Location?             @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  lines         PurchaseReceiveLine[]
+
+  // UNIQUE (organization_id, lower(receive_number)) lives in the migration.
+  @@index([organizationId, status])
+  @@index([organizationId, purchaseOrderId])
+  @@index([organizationId, vendorId])
+  @@index([organizationId, receivedDate])
+  @@index([organizationId, createdAt])
+  @@map("purchase_receives")
+}
+
+model PurchaseReceiveLine {
+  id                  String   @id @default(uuid()) @db.Uuid
+  purchaseReceiveId   String   @map("purchase_receive_id") @db.Uuid
+  organizationId      String   @map("organization_id") @db.Uuid
+  purchaseOrderLineId String   @map("purchase_order_line_id") @db.Uuid
+  itemId              String?  @map("item_id") @db.Uuid
+  quantity            Decimal  @db.Decimal(18, 3)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  purchaseReceive   PurchaseReceive   @relation(fields: [purchaseReceiveId], references: [id], onDelete: Cascade)
+  purchaseOrderLine PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+  item              Item?             @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([purchaseReceiveId])
+  @@index([purchaseOrderLineId])
+  @@index([organizationId])
+  @@map("purchase_receive_lines")
+}
