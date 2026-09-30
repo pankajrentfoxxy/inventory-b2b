@@ -13,7 +13,8 @@ import { EVENT_TYPES, TENANT_PERMISSION_CODES, rk } from '@b2b/contracts';
 import { StaticKeyProvider, createTokenVerifier, uuidv7, type EventEnvelope } from '@b2b/platform-kit';
 import { settleEvents } from '@b2b/test-kit';
 import { hashPassword } from '../src/modules/passwords.js';
-import { bootAuth, type FakeTenantStatus } from './setup.js';
+import { bootAuth, testConfig, type FakeTenantStatus } from './setup.js';
+import { authEnvSchema } from '../src/config.js';
 import type { AuthRuntime } from '../src/service.js';
 import type { InMemoryBroker } from '@b2b/test-kit';
 
@@ -264,6 +265,9 @@ describe('platform administrators and MFA', () => {
 
   it('accepts the development bypass code only when configured and never in production', async () => {
     assert.throws(() => testConfig({ NODE_ENV: 'production', MFA_DEV_BYPASS_CODE: '123456' }), /must not be set/);
+    assert.equal(authEnvSchema.shape.MFA_DEV_BYPASS_CODE.safeParse('123456').success, true, 'env parsing accepts six digits');
+    assert.equal(authEnvSchema.shape.MFA_DEV_BYPASS_CODE.safeParse('12345a').success, false);
+    assert.equal(authEnvSchema.shape.MFA_DEV_BYPASS_CODE.safeParse('').success, true, 'empty means off');
     const dev = await bootAuth({ MFA_DEV_BYPASS_CODE: '123456' });
     try {
       await seedPlatformAdmin('bypass@platform.test');
@@ -277,7 +281,7 @@ describe('platform administrators and MFA', () => {
       const again = await request(dev.runtime.app).post('/api/v1/auth/login').send({ email: 'bypass@platform.test', password: PASSWORD, portal: 'admin' });
       assert.equal(again.body.data.enrolmentRequired, true, 'the bypass does not count as an enrolment');
     } finally {
-      await dev.runtime.close?.();
+      await dev.runtime.stop();
     }
   });
 

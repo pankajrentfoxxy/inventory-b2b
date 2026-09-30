@@ -10,7 +10,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 export function testConfig(overrides: Partial<AuthEnv> = {}) {
   const env = loadEnv(authEnvSchema, { dir: path.resolve(here, '..') });
-  return toConfig({ ...env, ...overrides });
+  // A developer's local MFA bypass must never leak into the suite; tests opt in explicitly.
+  return toConfig({ ...env, MFA_DEV_BYPASS_CODE: '', ...overrides });
 }
 
 /** Tenant status source under test control (svc-tenant is not running in these tests). */

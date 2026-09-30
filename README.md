@@ -137,6 +137,11 @@ npm run migrate:legacy -w @b2b/svc-party       # vendors -> suppliers (needs LEG
 npm run migrate:legacy -w @b2b/svc-procurement # POs / GRNs + opening-stock manifest
 ```
 
+Development shortcut: set `MFA_DEV_BYPASS_CODE=123456` in `apps/svc-auth/.env` to accept that code as the
+platform two-factor code before an authenticator is set up. Every use is audited
+(`MFA_DEV_BYPASS_USED`), it does not count as an enrolment, and svc-auth refuses to start with it
+when `NODE_ENV=production`. Remove it once staff have enrolled.
+
 Sign-in flow: credentials -> two-factor code (platform staff) -> organisation choice (members of
 several tenants) -> home. The organisation switcher in the top bar re-issues the session for
 another tenant; the refresh token is an httpOnly cookie, so a page reload keeps you signed in.

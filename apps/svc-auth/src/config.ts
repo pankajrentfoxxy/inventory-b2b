@@ -22,7 +22,7 @@ export const authEnvSchema = baseEnvSchema.extend({
    * DEVELOPMENT ONLY. A fixed 6-digit code accepted as the platform two-factor code, so staff can sign
    * in before they set up an authenticator. Refused at boot when NODE_ENV=production. Every use is audited.
    */
-  MFA_DEV_BYPASS_CODE: z.string().regex(/^d{6}$/, 'MFA_DEV_BYPASS_CODE must be 6 digits').optional().or(z.literal('')),
+  MFA_DEV_BYPASS_CODE: z.string().refine((v) => v === '' || (v.length === 6 && [...v].every((c) => c >= '0' && c <= '9')), 'MFA_DEV_BYPASS_CODE must be 6 digits').optional(),
   COOKIE_SECURE: z.enum(['on', 'off']).default('off'),
   SERVICE_CLIENTS: z.string().default(''),
   TENANT_URL: z.string().optional().or(z.literal('')),
