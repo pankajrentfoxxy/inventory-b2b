@@ -37,6 +37,25 @@ model Party {
   linkedPartyId String?  @map("linked_party_id") @db.Uuid
   remarks       String?
   customFields  Json     @default("{}") @map("custom_fields")
+  /// Legacy vendor form fields (primary contact name, phones, other details)
+  salutation           String?  @db.VarChar(10)
+  firstName            String?  @map("first_name") @db.VarChar(100)
+  lastName             String?  @map("last_name") @db.VarChar(100)
+  workPhoneCountryCode String?  @map("work_phone_country_code") @db.VarChar(6)
+  mobileCountryCode    String?  @map("mobile_country_code") @db.VarChar(6)
+  mobile               String?  @db.VarChar(20)
+  language             String   @default("en") @db.VarChar(10)
+  /// GST state code of the place of supply
+  sourceOfSupply       String?  @map("source_of_supply") @db.Char(2)
+  currencyCode         String   @default("INR") @map("currency_code") @db.Char(3)
+  /// Vendors only: SUPPLIER | MANUFACTURER | SERVICE_PROVIDER | CONTRACTOR | OTHER
+  vendorType           String?  @map("vendor_type") @db.VarChar(20)
+  msmeRegistered       Boolean  @default(false) @map("msme_registered")
+  msmeNumber           String?  @map("msme_number") @db.VarChar(30)
+  tdsApplicable        Boolean  @default(false) @map("tds_applicable")
+  tdsSectionCode       String?  @map("tds_section_code") @db.VarChar(20)
+  tcsApplicable        Boolean  @default(false) @map("tcs_applicable")
+  openingBalance       Decimal? @map("opening_balance") @db.Decimal(18, 2)
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   version       Int      @default(0)
@@ -58,14 +77,15 @@ model PartyAddress {
   /// BILLING | SHIPPING
   kind      String  @db.VarChar(10)
   attention String? @db.VarChar(100)
-  line1     String  @db.VarChar(200)
+  line1     String? @db.VarChar(200)
   line2     String? @db.VarChar(200)
-  city      String  @db.VarChar(100)
+  city      String? @db.VarChar(100)
   state     String? @db.VarChar(100)
-  stateCode String  @map("state_code") @db.Char(2)
-  pincode   String  @db.VarChar(10)
+  stateCode String? @map("state_code") @db.Char(2)
+  pincode   String? @db.VarChar(10)
   country   String  @default("IN") @db.Char(2)
   phone     String? @db.VarChar(30)
+  fax       String? @db.VarChar(30)
   isDefault Boolean @default(false) @map("is_default")
 
   party Party @relation(fields: [partyId], references: [id], onDelete: Cascade)
@@ -83,6 +103,11 @@ model PartyContact {
   phone       String? @db.VarChar(30)
   designation String? @db.VarChar(100)
   isPrimary   Boolean @default(false) @map("is_primary")
+  salutation  String? @db.VarChar(10)
+  firstName   String? @map("first_name") @db.VarChar(100)
+  lastName    String? @map("last_name") @db.VarChar(100)
+  mobile      String? @db.VarChar(30)
+  department  String? @db.VarChar(100)
 
   party Party @relation(fields: [partyId], references: [id], onDelete: Cascade)
 

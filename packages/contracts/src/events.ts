@@ -146,6 +146,27 @@ export const iamPermissionsChangedPayload = z.object({
   reason: z.string(),
 });
 
+/**
+ * The eight specifications that identify a laptop configuration (one purchasable variant). Names are
+ * copied at document time so a PO, GRN, QC lot or stock row keeps showing what was ordered.
+ */
+export const LAPTOP_SPEC_KINDS = ['BRAND', 'MODEL', 'GENERATION', 'PROCESSOR', 'RAM', 'SSD', 'GPU', 'SCREEN_SIZE'] as const;
+export type LaptopSpecKind = (typeof LAPTOP_SPEC_KINDS)[number];
+/** Snapshot key per spec kind, in display order. */
+export const LAPTOP_SPEC_FIELDS = [
+  { kind: 'BRAND', key: 'brand', label: 'Brand' },
+  { kind: 'MODEL', key: 'model', label: 'Model' },
+  { kind: 'GENERATION', key: 'generation', label: 'Generation' },
+  { kind: 'PROCESSOR', key: 'processor', label: 'Processor' },
+  { kind: 'RAM', key: 'ram', label: 'RAM' },
+  { kind: 'SSD', key: 'ssd', label: 'SSD' },
+  { kind: 'GPU', key: 'gpu', label: 'Graphics / GPU' },
+  { kind: 'SCREEN_SIZE', key: 'screenSize', label: 'Screen size' },
+] as const satisfies readonly { kind: LaptopSpecKind; key: string; label: string }[];
+export type LaptopSpecKey = (typeof LAPTOP_SPEC_FIELDS)[number]['key'];
+export const laptopSpecs = z.object({ brand: z.string(), model: z.string(), generation: z.string(), processor: z.string(), ram: z.string(), ssd: z.string(), gpu: z.string(), screenSize: z.string() });
+export type LaptopSpecs = z.infer<typeof laptopSpecs>;
+
 export const productSnapshot = z.object({
   id: uuid,
   tenantId: uuid,
@@ -162,6 +183,8 @@ export const productSnapshot = z.object({
   taxRate: z.number().nullable(),
   status: z.string(),
   version: z.number().int(),
+  /** Laptop configurations only; absent on legacy non-laptop items. */
+  specs: laptopSpecs.nullable().optional(),
 });
 export type ProductSnapshot = z.infer<typeof productSnapshot>;
 

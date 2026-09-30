@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { gstinField, hsnField, optionalText, requiredText } from '@b2b/shared';
+import { LAPTOP_SPEC_KINDS } from '@b2b/contracts';
 import { DOC_TYPES } from './defaults.js';
 
 const code = (label: string, max: number) => requiredText(label, max, { min: 1, transform: 'upper' });
@@ -42,6 +43,15 @@ export const productListQuery = z.object({
   brandId: z.string().uuid().optional(),
   isSerialized: z.enum(['true', 'false']).optional(),
   trackInventory: z.enum(['true', 'false']).optional(),
+  /** true = laptop configurations only */
+  laptop: z.enum(['true', 'false']).optional(),
+  modelId: z.string().uuid().optional(),
+  generationId: z.string().uuid().optional(),
+  processorId: z.string().uuid().optional(),
+  ramId: z.string().uuid().optional(),
+  ssdId: z.string().uuid().optional(),
+  gpuId: z.string().uuid().optional(),
+  screenSizeId: z.string().uuid().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   cursor: z.string().optional(),
 });
@@ -67,3 +77,50 @@ export const binSchema = z.object({ code: code('Code', 20), capacity: z.number()
 export const numberingSchema = z.object({ prefixTemplate: z.string().min(1).max(40), padding: z.number().int().min(1).max(8).default(4), resetEachFy: z.boolean().default(true) });
 export const docTypeParam = z.enum(DOC_TYPES);
 export const statusChangeSchema = z.object({ reason: optionalText(300, {}, 'Reason') });
+
+/* ---- laptop configurations ---------------------------------------------------------------- */
+
+export const specKind = z.enum(LAPTOP_SPEC_KINDS);
+const specCode = z.string().trim().min(1, 'Code is required').max(20, 'Code must be at most 20 characters').transform((v) => v.toUpperCase()).refine((v) => v.split('').every((c) => (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')), 'Code may contain letters and digits only');
+export const specOptionSchema = z.object({
+  kind: specKind,
+  name: requiredText('Name', 100, { min: 1 }),
+  /** SKU token; derived from the name when omitted. */
+  code: specCode.optional(),
+  /** Required for MODEL, not allowed otherwise. */
+  brandId: z.string().uuid().nullable().optional(),
+  sortOrder: z.number().int().min(0).default(0),
+});
+export type SpecOptionInput = z.output<typeof specOptionSchema>;
+export const specOptionListQuery = z.object({ kind: specKind.optional(), brandId: z.string().uuid().optional(), includeInactive: z.enum(['true', 'false']).optional() });
+export const specOptionStatusSchema = z.object({ status: z.enum(['ACTIVE', 'INACTIVE']) });
+
+export const laptopSpecIdsSchema = z.object({
+  brandId: z.string().uuid({ message: 'Select a brand' }),
+  modelId: z.string().uuid({ message: 'Select a model' }),
+  generationId: z.string().uuid({ message: 'Select a generation' }),
+  processorId: z.string().uuid({ message: 'Select a processor' }),
+  ramId: z.string().uuid({ message: 'Select the RAM' }),
+  ssdId: z.string().uuid({ message: 'Select the SSD' }),
+  gpuId: z.string().uuid({ message: 'Select the graphics' }),
+  screenSizeId: z.string().uuid({ message: 'Select the screen size' }),
+});
+export type LaptopSpecIds = z.output<typeof laptopSpecIdsSchema>;
+export const laptopSchema = laptopSpecIdsSchema.extend({
+  /** Generated from the specs when omitted. */
+  sku: skuSchema.optional(),
+  /** Defaults to "<Brand> <Model>". */
+  name: requiredText('Name', 200, { min: 2 }).optional(),
+  description: optionalText(2000, { multiline: true }, 'Description'),
+  serialPattern: optionalText(200, {}, 'Serial pattern'),
+  hsnId: z.string().uuid().nullable().optional(),
+  taxRateId: z.string().uuid().nullable().optional(),
+  defaultWarrantyId: z.string().uuid().nullable().optional(),
+  purchasePrice: z.number().nonnegative().nullable().optional(),
+  sellingPrice: z.number().nonnegative().nullable().optional(),
+  reorderLevel: z.number().nonnegative().nullable().optional(),
+  activate: z.boolean().default(false),
+});
+export type LaptopInput = z.output<typeof laptopSchema>;
+export const laptopPatchSchema = laptopSchema.omit({ activate: true }).partial();
+export type LaptopPatch = z.output<typeof laptopPatchSchema>;

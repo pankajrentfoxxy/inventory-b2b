@@ -86,13 +86,13 @@ export class PartyService {
 
   /* ---- validation ---------------------------------------------------------- */
 
-  private validateGst(input: { gstTreatment: string; gstin?: string | null; pan?: string | null }, billing: { stateCode: string } | null) {
+  private validateGst(input: { gstTreatment: string; gstin?: string | null; pan?: string | null }, billing: { stateCode: string | null } | null) {
     const problems: { path: string; message: string }[] = [];
     if ((GSTIN_REQUIRED_TREATMENTS as readonly string[]).includes(input.gstTreatment) && !input.gstin) problems.push({ path: 'gstin', message: `GSTIN is required for ${input.gstTreatment.toLowerCase()} businesses` });
     if (input.gstin) {
       const problem = validateGstin(input.gstin, true);
       if (problem) throw businessRuleError('PARTY_INVALID_GSTIN', problem, [{ path: 'gstin', message: problem }]);
-      if (billing && input.gstin.slice(0, 2) !== billing.stateCode) {
+      if (billing?.stateCode && input.gstin.slice(0, 2) !== billing.stateCode) {
         throw businessRuleError('PARTY_GSTIN_STATE_MISMATCH', 'GSTIN state code does not match the billing address state', [{ path: 'gstin', message: `GSTIN is for state ${input.gstin.slice(0, 2)}; billing address is ${billing.stateCode}` }]);
       }
       if (input.pan && input.gstin.slice(2, 12) !== input.pan) problems.push({ path: 'pan', message: 'PAN does not match the GSTIN' });
@@ -133,6 +133,21 @@ export class PartyService {
       if (!dup.length) return candidate;
     }
     return `${base}${uuidv7().slice(-6).toUpperCase()}`;
+  }
+
+  /* ---- helpers shared with the party form (party.form.ts) --------------------- */
+
+  validateGstPublic(input: { gstTreatment: string; gstin?: string | null; pan?: string | null }, billing: { stateCode: string | null } | null) {
+    this.validateGst(input, billing);
+  }
+  uniqueCodePublic(tx: Tx, tenantId: string, partyType: PartyType, preferred: string | null, name: string) {
+    return this.uniqueCode(tx, tenantId, partyType, preferred, name);
+  }
+  emitPublic(tx: Tx, tenantId: string, partyType: PartyType, verb: 'created' | 'updated', id: string, actor: Actor) {
+    return this.emit(tx, tenantId, this.eventType(partyType, verb), id, actor);
+  }
+  auditPublic(tx: Tx, tenantId: string, actor: Actor, entry: { action: string; partyId: string; summary?: string; oldValue?: unknown; newValue?: unknown; version?: number | null }) {
+    return this.audit(tx, tenantId, actor, entry);
   }
 
   /* ---- create / read / update ------------------------------------------------ */

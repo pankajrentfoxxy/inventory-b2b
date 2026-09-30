@@ -6,9 +6,11 @@ import { Button, Card, CardBody, CardHeader, DescriptionList, DetailSkeleton, Er
 import { toApiError } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 import { formatDateTime, formatQty, humanize } from '../../../lib/utils';
+import { LaptopSpecsView } from '../../../components/LaptopSpecs';
 import { StatusBanner } from '../../procurement/components/ProgressBar';
 import { useScopedWarehouses } from '../../procurement/hooks';
 import { DefectCodeChips, GradeSelect } from '../components/inputs';
+import { LaptopInspectionPanel, laptopDecideBlocker } from '../components/LaptopInspection';
 import { SerialResultsTable, rowsFromLot, type SerialRowState } from '../components/SerialResultsTable';
 import { useConditionGrades, useDecideLot, useDefectCodes, useQcLot, useReopenLot, useSaveResults, useStartLot } from '../hooks';
 import type { QcLotDetail, UnitResultInput } from '../types';
@@ -23,6 +25,10 @@ function explain(code: string, message: string) {
       return `${message} Closed lots cannot be reopened; use an adjustment instead.`;
     case 'QC_LOT_CANCELLED':
       return `${message}`;
+    case 'QC_UNITS_ON_HOLD':
+    case 'QC_LAPTOP_CHECK_REQUIRED':
+    case 'QC_LAPTOP_CHECK_FAILED':
+      return message;
     case 'QC_INVALID_TRANSITION':
       return `${message} Reload to see the current status.`;
     default:
@@ -173,12 +179,15 @@ export function QcLotDetailPage() {
   const [reopenOpen, setReopenOpen] = useState(false);
   const [decideOpen, setDecideOpen] = useState(false);
   const [decideGrade, setDecideGrade] = useState('');
+  const [heldSerials, setHeldSerials] = useState<string | null>(null);
   const crumbs = [{ label: 'Quality' }, { label: 'QC lots', to: '/qc/lots' }, { label: lot.data?.number ?? '...' }];
   const canInspect = hasPermission('qc.inspect');
   const canApprove = hasPermission('qc.approve');
 
   const data = lot.data;
   const allInspected = useMemo(() => Boolean(data && data.mode === 'SERIAL' && data.progress && data.progress.inspected >= data.progress.total), [data]);
+  const laptopLot = Boolean(data?.isLaptop && data.expectedSpecs && data.mode === 'SERIAL');
+  const decideBlocker = data && laptopLot ? laptopDecideBlocker(data) : allInspected ? null : 'Every unit needs a saved result first';
 
   if (lot.isLoading) {
     return (
@@ -210,6 +219,22 @@ export function QcLotDetailPage() {
     }
   };
 
+  const doDecide = async (reason: string) => {
+    setHeldSerials(null);
+    try {
+      await decide.mutateAsync({ id: data.id, payload: { gradeCode: decideGrade || null, defectCodes: [], remarks: reason || null } });
+      toast.success(`${data.number} decided; posting to inventory`);
+      setDecideOpen(false);
+    } catch (err) {
+      const e = toApiError(err);
+      if (e.code === 'QC_UNITS_ON_HOLD') {
+        setHeldSerials(e.details[0]?.message ?? '');
+        setDecideOpen(false);
+      }
+      toast.error(explain(e.code, e.message));
+    }
+  };
+
   const sourceTo = data.sourceType === 'GRN' ? `/purchases/receipts/${data.sourceId}` : null;
   const inspectorLabel = data.inspectorId ? (data.inspectorId === session?.user.id ? 'You' : data.inspectorId.slice(0, 8)) : null;
 
@@ -224,7 +249,8 @@ export function QcLotDetailPage() {
         }
         subtitle={
           <span>
-            {data.item.name} <span className="font-mono text-xs">{data.item.sku}</span> - {formatQty(data.qty)} {data.item.unitCode} - {data.mode === 'SERIAL' ? 'serial inspection' : 'quantity inspection'}
+            <span className="font-mono text-xs">{data.item.sku}</span> {data.item.name} - {formatQty(data.qty)} {laptopLot ? (data.qty === 1 ? 'laptop' : 'laptops') : data.item.unitCode} - {data.mode === 'SERIAL' ? (laptopLot ? 'laptop inspection' : 'serial inspection') : 'quantity inspection'}
+            {data.expectedSpecs && <LaptopSpecsView specs={data.expectedSpecs} variant="inline" className="mt-0.5" />}
           </span>
         }
         breadcrumbs={crumbs}
@@ -236,7 +262,7 @@ export function QcLotDetailPage() {
               </Button>
             )}
             {data.mode === 'SERIAL' && (data.status === 'OPEN' || data.status === 'IN_INSPECTION') && canApprove && (
-              <Button icon={Gavel} onClick={() => setDecideOpen(true)} disabled={!allInspected} title={allInspected ? undefined : 'Every unit needs a saved result first'}>
+              <Button icon={Gavel} onClick={() => setDecideOpen(true)} disabled={Boolean(decideBlocker)} title={decideBlocker ?? undefined}>
                 Decide
               </Button>
             )}
@@ -250,8 +276,39 @@ export function QcLotDetailPage() {
       />
 
       <div className="space-y-4">
-        {data.status === 'DECIDED' && <StatusBanner tone="info" title="Posting to inventory..." message={lot.polling ? `Pass ${formatQty(data.passQty)}, fail ${formatQty(data.failQty)}. Stock buckets are being updated; this page refreshes every 2 seconds.` : 'The posting is taking longer than usual. It will complete in the background.'} action={lot.pollingExpired ? <Button size="sm" variant="secondary" icon={RefreshCw} onClick={() => void lot.refetch()}>Refresh</Button> : <RefreshCw className="w-4 h-4 animate-spin text-brand-600" aria-label="Refreshing" />} />}
-        {data.status === 'CLOSED' && <StatusBanner tone="success" title="Posted to inventory" message={<span className="tabular">{formatQty(data.passQty)} passed, {formatQty(data.failQty)} failed. Closed {formatDateTime(data.closedAt)}.</span>} />}
+        {laptopLot && (data.status === 'OPEN' || data.status === 'IN_INSPECTION') && canApprove && decideBlocker && (
+          <p className="text-xs text-slate-600 flex items-center gap-1.5">
+            <Gavel className="w-3.5 h-3.5 text-slate-400" /> Decide is available once every laptop is passed or failed: {decideBlocker}.
+          </p>
+        )}
+        {heldSerials !== null && (data.status === 'OPEN' || data.status === 'IN_INSPECTION') && (
+          <StatusBanner
+            tone="warning"
+            title="Laptops on hold"
+            message={
+              <span>
+                Pass or fail these laptops before deciding the lot: <span className="font-mono">{heldSerials || 'see the list below'}</span>
+              </span>
+            }
+            action={
+              <Button size="sm" variant="secondary" onClick={() => setHeldSerials(null)}>
+                Dismiss
+              </Button>
+            }
+          />
+        )}
+        {data.status === 'DECIDED' && <StatusBanner tone="info" title="Posting to inventory..." message={lot.polling ? `${laptopLot ? `${formatQty(data.passQty)} moving to Available, ${formatQty(data.failQty)} to Rejected` : `Pass ${formatQty(data.passQty)}, fail ${formatQty(data.failQty)}`}. Stock buckets are being updated; this page refreshes every 2 seconds.` : 'The posting is taking longer than usual. It will complete in the background.'} action={lot.pollingExpired ? <Button size="sm" variant="secondary" icon={RefreshCw} onClick={() => void lot.refetch()}>Refresh</Button> : <RefreshCw className="w-4 h-4 animate-spin text-brand-600" aria-label="Refreshing" />} />}
+        {data.status === 'CLOSED' && (
+          <StatusBanner
+            tone="success"
+            title="Posted to inventory"
+            message={
+              <span className="tabular">
+                {laptopLot ? `${formatQty(data.passQty)} moved to Available, ${formatQty(data.failQty)} to Rejected.` : `${formatQty(data.passQty)} passed, ${formatQty(data.failQty)} failed.`} Closed {formatDateTime(data.closedAt)}.
+              </span>
+            }
+          />
+        )}
         {data.status === 'CANCELLED' && <StatusBanner tone="danger" title="Lot cancelled" message={data.statusReason ?? undefined} />}
         {data.status === 'IN_INSPECTION' && data.statusReason && <StatusBanner tone="warning" title="Reopened" message={data.statusReason} />}
 
@@ -276,14 +333,16 @@ export function QcLotDetailPage() {
             </CardBody>
           </Card>
           <Card>
-            <CardHeader title="Item" />
+            <CardHeader title={laptopLot ? 'Laptop' : 'Item'} />
             <CardBody>
-              <DescriptionList columns={1} items={[{ label: 'Product', value: data.item.name }, { label: 'SKU', value: data.item.sku, mono: true }, { label: 'Serialized', value: data.item.isSerialized ? `Yes${data.item.requiresImei ? ' (IMEI)' : ''}` : 'No' }, { label: 'Serial pattern', value: data.item.serialPattern, mono: true }]} />
+              <DescriptionList columns={1} items={[{ label: laptopLot ? 'Laptop SKU' : 'SKU', value: data.item.sku, mono: true }, { label: laptopLot ? 'Name' : 'Product', value: data.item.name }, { label: 'Serialized', value: data.item.isSerialized ? `Yes${data.item.requiresImei ? ' (IMEI)' : ''}` : 'No' }, { label: 'Serial pattern', value: data.item.serialPattern, mono: true }]} />
             </CardBody>
           </Card>
         </div>
 
-        {data.mode === 'SERIAL' ? <SerialInspection key={`${data.id}:${data.status}`} lot={data} canInspect={canInspect} /> : <QuantityDecision key={`${data.id}:${data.status}`} lot={data} canApprove={canApprove} onDecided={() => undefined} />}
+        {laptopLot ? (
+          <LaptopInspectionPanel key={`${data.id}:${data.status}`} lot={data} canInspect={canInspect} />
+        ) : data.mode === 'SERIAL' ? <SerialInspection key={`${data.id}:${data.status}`} lot={data} canInspect={canInspect} /> : <QuantityDecision key={`${data.id}:${data.status}`} lot={data} canApprove={canApprove} onDecided={() => undefined} />}
       </div>
 
       <ReasonDialog
@@ -292,7 +351,16 @@ export function QcLotDetailPage() {
         title={`Decide ${data.number}`}
         message={
           <div className="space-y-3">
-            <p>Pass and fail counts come from the saved unit results. Units without a grade get the grade chosen here.</p>
+            {laptopLot && data.progress ? (
+              <p>
+                <span className="font-medium text-emerald-700">
+                  {data.progress.passed} laptop{data.progress.passed === 1 ? '' : 's'} move to Available
+                </span>{' '}
+                and <span className="font-medium text-red-700">{data.progress.failed} to Rejected</span>. Laptops without a grade get the grade chosen here.
+              </p>
+            ) : (
+              <p>Pass and fail counts come from the saved unit results. Units without a grade get the grade chosen here.</p>
+            )}
             <GradeSelect grades={grades.data ?? []} value={decideGrade} onChange={setDecideGrade} />
           </div>
         }
@@ -301,7 +369,7 @@ export function QcLotDetailPage() {
         reasonRequired={false}
         reasonLabel="Remarks (optional)"
         loading={decide.isPending}
-        onConfirm={({ reason }) => void run(() => decide.mutateAsync({ id: data.id, payload: { gradeCode: decideGrade || null, defectCodes: [], remarks: reason || null } }), `${data.number} decided; posting to inventory`).then(() => setDecideOpen(false)).catch(() => undefined)}
+        onConfirm={({ reason }) => void doDecide(reason)}
       />
       <ReasonDialog open={reopenOpen} onClose={() => setReopenOpen(false)} title={`Reopen ${data.number}`} message="The decision is withdrawn and results can be edited. Lots already posted to inventory (Closed) cannot be reopened." confirmLabel="Reopen" reasonRequired={false} loading={reopen.isPending} onConfirm={({ reason }) => void run(() => reopen.mutateAsync({ id: data.id, reason: reason || null }), `${data.number} reopened`).then(() => setReopenOpen(false)).catch(() => undefined)} />
     </>

@@ -1,82 +1,97 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Package, Plus, SearchX } from 'lucide-react';
-import { Badge, Button, Card, DataTable, EmptyState, ErrorState, ListToolbar, Select, StatusBadge, type Column } from '../../../components/ui';
+import { Laptop, Plus, SearchX } from 'lucide-react';
+import { Button, Card, DataTable, EmptyState, ErrorState, ListToolbar, Select, StatusBadge, type Column } from '../../../components/ui';
+import { LaptopSpecsView } from '../../../components/LaptopSpecs';
 import { useUrlFilters } from '../../../hooks/useUrlFilters';
 import { toApiError } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
-import { useProducts } from '../hooks';
-import type { Product } from '../types';
-import { ProductFormModal } from '../components/ProductFormModal';
+import { formatMoney } from '../../../lib/utils';
+import { useLaptopSpecs, useProducts } from '../hooks';
+import type { Product, SpecKind, SpecOption } from '../types';
 
-const DEFAULTS = { status: '', type: '', isSerialized: '', q: '' };
+const DEFAULTS = { status: '', q: '', brandId: '', modelId: '', processorId: '', ramId: '', ssdId: '', generationId: '' };
+type FilterKey = 'brandId' | 'modelId' | 'generationId' | 'processorId' | 'ramId' | 'ssdId';
+const FILTERS: { key: FilterKey; kind: SpecKind; label: string; width: string }[] = [
+  { key: 'brandId', kind: 'BRAND', label: 'Brand', width: 'w-36' },
+  { key: 'modelId', kind: 'MODEL', label: 'Model', width: 'w-44' },
+  { key: 'generationId', kind: 'GENERATION', label: 'Generation', width: 'w-36' },
+  { key: 'processorId', kind: 'PROCESSOR', label: 'Processor', width: 'w-44' },
+  { key: 'ramId', kind: 'RAM', label: 'RAM', width: 'w-28' },
+  { key: 'ssdId', kind: 'SSD', label: 'SSD', width: 'w-28' },
+];
 const VIEWS = [
-  { value: '', label: 'All Products' },
-  { value: 'DRAFT', label: 'Draft Products' },
-  { value: 'ACTIVE', label: 'Active Products' },
-  { value: 'INACTIVE', label: 'Inactive Products' },
-  { value: 'ARCHIVED', label: 'Archived Products' },
+  { value: '', label: 'All configurations' },
+  { value: 'DRAFT', label: 'Draft' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'INACTIVE', label: 'Inactive' },
+  { value: 'ARCHIVED', label: 'Archived' },
 ];
 
+const dash = <span className="text-slate-300">-</span>;
+const cell = (v: string | null | undefined) => (v ? <span className="text-slate-800 whitespace-nowrap">{v}</span> : dash);
+
+/** Laptop configurations (the product master is laptop-only). */
 export function ProductListPage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
   const canManage = hasPermission('master.manage');
+  const [searchParams] = useSearchParams();
   const { filters, setFilters, reset } = useUrlFilters(DEFAULTS);
-  const params = useMemo(() => ({ q: filters.q, status: filters.status, type: filters.type, isSerialized: filters.isSerialized, limit: 50 }), [filters]);
+
+  // Quick-create ("+" in the top bar) lands here with ?new=1.
+  useEffect(() => {
+    if (searchParams.get('new') === '1') navigate(canManage ? '/masters/products/new' : '/masters/products', { replace: true });
+  }, [searchParams, canManage, navigate]);
+
+  const specs = useLaptopSpecs({ includeInactive: true });
+  const byKind = useMemo(() => {
+    const map = new Map<SpecKind, SpecOption[]>();
+    for (const o of specs.data ?? []) map.set(o.kind, [...(map.get(o.kind) ?? []), o]);
+    return map;
+  }, [specs.data]);
+  const nameOf = (id: string) => specs.data?.find((o) => o.id === id)?.name ?? '...';
+
+  const params = useMemo(
+    () => ({ laptop: 'true' as const, q: filters.q, status: filters.status, brandId: filters.brandId, modelId: filters.modelId, generationId: filters.generationId, processorId: filters.processorId, ramId: filters.ramId, ssdId: filters.ssdId, limit: 50 }),
+    [filters],
+  );
   const query = useProducts(params);
-  const [searchParams, setSearchParams] = useSearchParams();
-  // Quick-create ("+" in the top bar) lands here with ?new=1 and opens the form straight away.
-  const [modalOpen, setModalOpen] = useState(searchParams.get('new') === '1' && canManage);
-
-  const closeModal = () => {
-    setModalOpen(false);
-    if (searchParams.get('new')) {
-      const next = new URLSearchParams(searchParams);
-      next.delete('new');
-      setSearchParams(next, { replace: true });
-    }
-  };
-
   const rows = useMemo(() => query.data?.pages.flatMap((p) => p.data) ?? [], [query.data]);
-  const hasFilters = Boolean(filters.q || filters.status || filters.type || filters.isSerialized);
+  const hasFilters = Boolean(filters.q || filters.status || FILTERS.some((f) => filters[f.key]));
 
   const columns: Column<Product>[] = [
-    { key: 'sku', header: 'SKU', render: (p) => <span className="font-mono text-[13px] tabular text-slate-800">{p.sku}</span> },
+    { key: 'sku', header: 'SKU', render: (p) => <span className="font-mono text-[13px] tabular text-slate-800 whitespace-nowrap">{p.sku}</span> },
     {
       key: 'name',
-      header: 'Name',
+      header: 'Configuration',
       render: (p) => (
-        <div className="min-w-0">
+        <div className="min-w-0 max-w-md">
           <p className="font-medium text-brand-700">{p.name}</p>
-          {p.description && <p className="text-xs text-slate-500 truncate max-w-md">{p.description}</p>}
+          {p.specs ? <LaptopSpecsView specs={p.specs} variant="inline" /> : <span className="text-xs text-slate-400">Generic product (no specifications)</span>}
         </div>
       ),
     },
-    { key: 'type', header: 'Type', hideBelow: 'md', render: (p) => <span className="text-slate-800">{p.type === 'GOODS' ? 'Goods' : 'Service'}</span> },
-    { key: 'unit', header: 'Unit', hideBelow: 'lg', render: (p) => <span className="text-slate-800">{p.unitCode}</span> },
-    { key: 'hsn', header: 'HSN/SAC', hideBelow: 'lg', render: (p) => <span className="font-mono text-[13px] tabular text-slate-800">{p.hsnCode ?? <span className="text-slate-300">-</span>}</span> },
-    { key: 'tax', header: 'Tax', hideBelow: 'xl', align: 'right', render: (p) => <span className="tabular text-slate-800">{p.taxRate === null ? <span className="text-slate-300">-</span> : `${p.taxRate}%`}</span> },
-    {
-      key: 'serialized',
-      header: 'Tracking',
-      hideBelow: 'md',
-      render: (p) => (
-        <span className="flex items-center gap-1 flex-wrap">
-          {p.isSerialized && <Badge tone="purple">Serialized</Badge>}
-          {p.requiresImei && <Badge tone="blue">IMEI</Badge>}
-          {!p.trackInventory && <Badge tone="gray">Not tracked</Badge>}
-        </span>
-      ),
-    },
+    { key: 'generation', header: 'Generation', hideBelow: 'xl', render: (p) => cell(p.specs?.generation) },
+    { key: 'processor', header: 'Processor', hideBelow: 'lg', render: (p) => cell(p.specs?.processor) },
+    { key: 'ram', header: 'RAM', hideBelow: 'md', render: (p) => cell(p.specs?.ram) },
+    { key: 'ssd', header: 'SSD', hideBelow: 'md', render: (p) => cell(p.specs?.ssd) },
+    { key: 'screen', header: 'Screen', hideBelow: 'xl', render: (p) => cell(p.specs?.screenSize) },
+    { key: 'price', header: 'Purchase price', hideBelow: 'lg', align: 'right', render: (p) => <span className="tabular text-slate-800 whitespace-nowrap">{p.purchasePrice === null ? dash : formatMoney(p.purchasePrice)}</span> },
     { key: 'status', header: 'Status', render: (p) => <StatusBadge status={p.status} /> },
   ];
 
+  const modelOptions = (byKind.get('MODEL') ?? []).filter((m) => !filters.brandId || m.brandId === filters.brandId);
   const chips = [
     filters.q ? { label: <>Search: <strong>{filters.q}</strong></>, onClear: () => setFilters({ q: '' }) } : null,
-    filters.type ? { label: <>Type: <strong>{filters.type === 'GOODS' ? 'Goods' : 'Services'}</strong></>, onClear: () => setFilters({ type: '' }) } : null,
-    filters.isSerialized ? { label: <>{filters.isSerialized === 'true' ? 'Serialized only' : 'Non-serialized only'}</>, onClear: () => setFilters({ isSerialized: '' }) } : null,
+    ...FILTERS.map((f) => (filters[f.key] ? { label: <>{f.label}: <strong>{nameOf(filters[f.key])}</strong></>, onClear: () => setFilters({ [f.key]: '' } as Partial<typeof DEFAULTS>) } : null)),
   ].filter((c): c is { label: JSX.Element; onClear: () => void } => c !== null);
+
+  const newButton = canManage ? (
+    <Button icon={Plus} onClick={() => navigate('/masters/products/new')}>
+      New configuration
+    </Button>
+  ) : undefined;
 
   return (
     <>
@@ -86,17 +101,20 @@ export function ProductListPage() {
         onViewChange={(v) => setFilters({ status: v })}
         filters={
           <>
-            <Select aria-label="Product type" value={filters.type} onChange={(e) => setFilters({ type: e.target.value })} placeholder="All types" options={[{ value: 'GOODS', label: 'Goods' }, { value: 'SERVICE', label: 'Services' }]} className="w-36" />
-            <Select aria-label="Serialization" value={filters.isSerialized} onChange={(e) => setFilters({ isSerialized: e.target.value })} placeholder="Serialized: any" options={[{ value: 'true', label: 'Serialized only' }, { value: 'false', label: 'Non-serialized' }]} className="w-40" />
+            {FILTERS.map((f) => (
+              <Select
+                key={f.key}
+                aria-label={f.label}
+                value={filters[f.key]}
+                onChange={(e) => setFilters(f.key === 'brandId' ? { brandId: e.target.value, modelId: '' } : ({ [f.key]: e.target.value } as Partial<typeof DEFAULTS>))}
+                placeholder={`${f.label}: any`}
+                options={(f.kind === 'MODEL' ? modelOptions : byKind.get(f.kind) ?? []).map((o) => ({ value: o.id, label: o.status === 'ACTIVE' ? o.name : `${o.name} (inactive)` }))}
+                className={f.width}
+              />
+            ))}
           </>
         }
-        actions={
-          canManage ? (
-            <Button icon={Plus} onClick={() => setModalOpen(true)}>
-              New
-            </Button>
-          ) : undefined
-        }
+        actions={newButton}
         chips={chips}
         onClearAll={hasFilters ? reset : undefined}
         onRefresh={() => void query.refetch()}
@@ -112,9 +130,14 @@ export function ProductListPage() {
           error={query.isError ? <ErrorState message={toApiError(query.error).message} onRetry={() => void query.refetch()} /> : undefined}
           empty={
             hasFilters ? (
-              <EmptyState icon={SearchX} title="No products match your filters" action={<Button variant="secondary" size="sm" onClick={reset}>Clear filters</Button>} />
+              <EmptyState icon={SearchX} title="No configurations match your filters" action={<Button variant="secondary" size="sm" onClick={reset}>Clear filters</Button>} />
             ) : (
-              <EmptyState icon={Package} title="No products yet" hint="Products are the goods and services you buy, stock and sell. Add your first product to start raising purchase orders." action={canManage ? <Button icon={Plus} onClick={() => setModalOpen(true)}>New Product</Button> : undefined} />
+              <EmptyState
+                icon={Laptop}
+                title="No laptop configurations yet"
+                hint="A configuration is one purchasable variant: brand, model, generation, processor, RAM, SSD, graphics and screen size. Create one to start raising purchase orders."
+                action={newButton}
+              />
             )
           }
           onRowClick={(r) => navigate(`/masters/products/${r.id}`)}
@@ -126,10 +149,8 @@ export function ProductListPage() {
             </Button>
           </div>
         )}
-        {!query.hasNextPage && rows.length > 0 && <p className="px-4 py-2 text-xs text-slate-500 border-t border-slate-100 tabular">{rows.length} product{rows.length === 1 ? '' : 's'}</p>}
+        {!query.hasNextPage && rows.length > 0 && <p className="px-4 py-2 text-xs text-slate-500 border-t border-slate-100 tabular">{rows.length} configuration{rows.length === 1 ? '' : 's'}</p>}
       </Card>
-
-      <ProductFormModal open={modalOpen} onClose={closeModal} onSaved={(p) => navigate(`/masters/products/${p.id}`)} />
     </>
   );
 }

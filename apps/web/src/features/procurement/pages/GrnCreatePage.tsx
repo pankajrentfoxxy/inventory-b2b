@@ -6,6 +6,7 @@ import { Button, Card, CardBody, CardHeader, EmptyState, ErrorState, Field, Form
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { toApiError } from '../../../lib/api';
 import { cn, formatMoney, formatQty, humanize, todayISO } from '../../../lib/utils';
+import { LineSpecs } from '../components/LineSpecs';
 import { WarehouseSelect } from '../components/pickers';
 import { SerialCapturePanel, type CapturedSerial } from '../components/SerialCapturePanel';
 import { useCreateGrn, usePurchaseOrders, useReceivableLines, useScopedWarehouses, useWarehouseDetail } from '../hooks';
@@ -175,10 +176,10 @@ export function GrnCreatePage() {
                 <Field label="Received date" required error={errors.receivedDate} htmlFor="grn-date">
                   <Input id="grn-date" type="date" value={header.receivedDate} onChange={(e) => setHeader({ ...header, receivedDate: e.target.value })} error={Boolean(errors.receivedDate)} />
                 </Field>
-                <Field label="Supplier invoice no." error={errors.supplierInvoiceNo}>
+                <Field label="Vendor invoice no." error={errors.supplierInvoiceNo}>
                   <Input value={header.supplierInvoiceNo} sanitize="singleLine" maxLength={60} onChange={(e) => setHeader({ ...header, supplierInvoiceNo: e.target.value })} error={Boolean(errors.supplierInvoiceNo)} />
                 </Field>
-                <Field label="Supplier invoice date" error={errors.supplierInvoiceDate} htmlFor="grn-inv-date">
+                <Field label="Vendor invoice date" error={errors.supplierInvoiceDate} htmlFor="grn-inv-date">
                   <Input id="grn-inv-date" type="date" value={header.supplierInvoiceDate} onChange={(e) => setHeader({ ...header, supplierInvoiceDate: e.target.value })} error={Boolean(errors.supplierInvoiceDate)} />
                 </Field>
                 <Field label="Delivery note no." error={errors.deliveryNoteNo}>
@@ -196,7 +197,10 @@ export function GrnCreatePage() {
         </Card>
 
         <Card className="overflow-hidden">
-          <CardHeader title="Lines to receive" description={receivable.data ? 'Quantity defaults to what is still open. Untick a line to leave it out.' : 'Select a purchase order to load its open lines.'} />
+          <CardHeader
+            title="Laptops to receive"
+            description={receivable.data ? 'Check each SKU and its specs against the delivery. Quantity defaults to what is still open; untick a line to leave it out. Received laptops go into QC hold and are not available until QC passes.' : 'Select a purchase order to load its open lines.'}
+          />
           {!poId ? (
             <EmptyState icon={PackageCheck} title="No purchase order selected" hint="Pick an issued or partially received order above." />
           ) : receivable.isLoading || whLoading ? (
@@ -219,20 +223,21 @@ export function GrnCreatePage() {
                 return (
                   <div key={l.id} className={cn('px-5 py-4 space-y-3', !s.include && 'opacity-60')}>
                     <div className="flex flex-col lg:flex-row lg:items-start gap-3">
-                      <label className="flex items-start gap-3 min-w-0 flex-1 cursor-pointer">
-                        <input type="checkbox" className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-600" checked={s.include} onChange={(e) => update(l.id, { include: e.target.checked })} aria-label={`Include ${l.item.name}`} />
-                        <span className="min-w-0">
-                          <span className="block text-sm font-medium text-slate-900">{l.item.name}</span>
-                          <span className="block text-xs text-slate-500 font-mono">
-                            {l.item.sku}
-                            {l.item.isSerialized ? ' - serialized' : ''}
-                            {l.item.requiresImei ? ' - IMEI required' : ''}
-                          </span>
-                          <span className="block text-xs text-slate-500 tabular mt-0.5">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <input type="checkbox" className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-600 cursor-pointer" checked={s.include} onChange={(e) => update(l.id, { include: e.target.checked })} aria-label={`Include ${l.item.sku} ${l.item.name}`} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm">
+                            <span className="font-mono font-semibold text-slate-900">{l.item.sku}</span> <span className="text-slate-700">{l.item.name}</span>
+                          </p>
+                          <LineSpecs specs={l.item.specs} className="mt-0.5" />
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {[l.item.isSerialized ? 'Serialized' : null, l.item.requiresImei ? 'IMEI required' : null, l.item.qcRequired ? 'QC required' : null].filter(Boolean).join(' - ')}
+                          </p>
+                          <p className="text-xs text-slate-500 tabular mt-0.5">
                             Ordered {formatQty(l.orderedQty)} - received {formatQty(l.receivedQty)} - <span className="font-medium text-slate-700">remaining {formatQty(l.remainingQty)}</span> {l.item.unitCode}
-                          </span>
-                        </span>
-                      </label>
+                          </p>
+                        </div>
+                      </div>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 lg:w-[560px] shrink-0">
                         <Field label="Qty to receive" error={err('qty')}>
                           <Input sanitize="decimal" value={s.qty} disabled={!s.include} onChange={(e) => update(l.id, { qty: e.target.value })} className="text-right tabular" error={Boolean(err('qty')) || over} aria-label="Quantity to receive" />

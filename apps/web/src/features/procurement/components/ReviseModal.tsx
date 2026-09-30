@@ -6,6 +6,7 @@ import { toApiError } from '../../../lib/api';
 import { formatMoney, formatQty } from '../../../lib/utils';
 import { useRevisePurchaseOrder } from '../hooks';
 import type { PurchaseOrder, ReviseInput } from '../types';
+import { LineSpecs } from './LineSpecs';
 import { ProductPicker } from './pickers';
 import { PoTotals } from './PoTotals';
 import { effectiveTaxRate, emptyLine, lineFromProduct, lineToPayload, previewTotals, type PoLineFormValues } from './poForm.model';
@@ -31,6 +32,7 @@ export function ReviseModal({ po, open, onClose, onRevised }: { po: PurchaseOrde
         itemId: l.itemId,
         itemName: l.item.name,
         itemSku: l.item.sku,
+        specs: l.item.specs ?? null,
         unitCode: l.item.unitCode,
         orderedQty: String(l.orderedQty),
         unitPrice: String(l.unitPrice),
@@ -100,7 +102,7 @@ export function ReviseModal({ po, open, onClose, onRevised }: { po: PurchaseOrde
           <table className="w-full min-w-[760px] text-sm border-collapse">
             <thead>
               <tr className="text-[11px] uppercase tracking-wider text-slate-500 border-y border-slate-200 bg-slate-50/60">
-                <th className="text-left font-semibold px-3 py-2 w-[38%]">Product</th>
+                <th className="text-left font-semibold px-3 py-2 w-[38%]">Laptop (SKU)</th>
                 <th className="text-right font-semibold px-3 py-2">Received</th>
                 <th className="text-right font-semibold px-3 py-2 w-[14%]">Quantity</th>
                 <th className="text-right font-semibold px-3 py-2 w-[16%]">Unit price</th>
@@ -118,12 +120,13 @@ export function ReviseModal({ po, open, onClose, onRevised }: { po: PurchaseOrde
                     <td className="px-3 py-2">
                       <ProductPicker
                         value={l.itemId}
-                        selectedLabel={l.itemName ? `${l.itemName}${l.itemSku ? ` (${l.itemSku})` : ''}` : undefined}
+                        selectedLabel={l.itemName ? `${l.itemSku ? `${l.itemSku} - ` : ''}${l.itemName}` : undefined}
                         disabled={locked}
                         error={Boolean(errors[`lines.${i}.itemId`] || lineErr)}
                         onChange={(id, p) => (p ? update(i, lineFromProduct(p, l)) : update(i, { itemId: id }))}
                         size="sm"
                       />
+                      <LineSpecs specs={l.specs} className="mt-1.5" />
                       {(errors[`lines.${i}.itemId`] || lineErr) && <p className="text-xs text-red-600 mt-1">{errors[`lines.${i}.itemId`] ?? lineErr}</p>}
                     </td>
                     <td className="px-3 py-2 text-right tabular text-slate-600">{locked ? formatQty(l.receivedQty) : <span className="text-slate-300">-</span>}</td>

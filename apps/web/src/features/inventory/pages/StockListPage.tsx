@@ -6,6 +6,7 @@ import { useUrlFilters } from '../../../hooks/useUrlFilters';
 import { toApiError } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 import { formatMoney, formatQty, humanize } from '../../../lib/utils';
+import { LaptopSpecsView } from '../../../components/LaptopSpecs';
 import { WarehousePicker } from '../components/WarehousePicker';
 import { compactChips } from '../components/chips';
 import { useScopedWarehouses, useStock } from '../hooks';
@@ -32,17 +33,21 @@ export function StockListPage() {
   const columns: Column<StockRow>[] = [
     {
       key: 'item',
-      header: 'Item',
+      header: 'Laptop (SKU)',
       render: (r) => (
-        <div className="min-w-0">
-          <p className="font-medium text-slate-900 flex items-center gap-2">
-            <span className="truncate">{r.name}</span>
+        <div className="min-w-0 max-w-[320px]">
+          <p className="font-mono text-[13px] font-semibold text-slate-900 flex items-center gap-2">
+            <span className="truncate">{r.sku}</span>
             {r.isSerialized && <Badge tone="purple">Serialized</Badge>}
           </p>
-          <p className="text-xs text-slate-500 font-mono">{r.sku}</p>
+          <p className="text-xs text-slate-700 truncate">{r.name}</p>
+          <LaptopSpecsView specs={r.specs} variant="inline" className="xl:hidden" />
         </div>
       ),
     },
+    { key: 'processor', header: 'Processor', hideBelow: 'xl', render: (r) => <span className="text-xs text-slate-700">{r.specs?.processor ?? <span className="text-slate-300">-</span>}</span> },
+    { key: 'ram', header: 'RAM', hideBelow: 'xl', render: (r) => <span className="text-xs text-slate-700 whitespace-nowrap">{r.specs?.ram ?? <span className="text-slate-300">-</span>}</span> },
+    { key: 'ssd', header: 'SSD', hideBelow: 'xl', render: (r) => <span className="text-xs text-slate-700 whitespace-nowrap">{r.specs?.ssd ?? <span className="text-slate-300">-</span>}</span> },
     { key: 'warehouse', header: 'Warehouse', render: (r) => <span title={r.warehouseName}>{r.warehouseCode}</span>, hideBelow: 'sm' },
     { key: 'qcHold', header: 'QC Hold', align: 'right', render: (r) => <span className="tabular text-amber-700">{formatQty(r.qcHold)}</span>, hideBelow: 'md' },
     { key: 'available', header: 'Available', align: 'right', render: (r) => <span className="tabular font-medium text-emerald-700">{formatQty(r.available)}</span> },
@@ -65,7 +70,7 @@ export function StockListPage() {
     <EmptyState
       icon={Boxes}
       title="No stock yet"
-      hint="Record opening stock or receive a purchase order to see balances here."
+      hint="Receive a purchase order (laptops go to QC hold, then Available once QC passes) or record opening stock."
       action={
         <div className="flex flex-wrap gap-2 justify-center">
           {hasPermission('inventory.adjust') && <Button size="sm" onClick={() => navigate('/inventory/opening-stock')}>Record opening stock</Button>}

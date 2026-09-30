@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Compass } from 'lucide-react';
 import { AppLayout } from './layout/AppLayout';
 import { ProtectedRoute, type Area } from './router/ProtectedRoute';
@@ -27,6 +27,11 @@ function Shell({ children, permission, area = 'tenant' }: { children: React.Reac
 
 const tenantRoutes: RouteDef[] = [...masterRoutes, ...partiesRoutes, ...inventoryRoutes, ...procurementRoutes, ...qcRoutes, ...iamRoutes, ...legacyRoutes];
 
+function SupplierRedirect() {
+  const { pathname, search } = useLocation();
+  return <Navigate to={pathname.replace('/parties/suppliers', '/parties/vendors') + search} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -44,7 +49,9 @@ export default function App() {
       <Route path="/purchases" element={<Navigate to="/purchases/orders" replace />} />
       <Route path="/settings" element={<Navigate to="/settings/members" replace />} />
       <Route path="/masters" element={<Navigate to="/masters/products" replace />} />
-      <Route path="/parties" element={<Navigate to="/parties/suppliers" replace />} />
+      <Route path="/parties" element={<Navigate to="/parties/vendors" replace />} />
+      {/* Suppliers were renamed to vendors: keep old links working */}
+      <Route path="/parties/suppliers/*" element={<SupplierRedirect />} />
       <Route path="/inventory" element={<Navigate to="/inventory/stock" replace />} />
       <Route path="/qc" element={<Navigate to="/qc/lots" replace />} />
       {tenantRoutes.map((r) => (

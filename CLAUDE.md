@@ -19,6 +19,15 @@ verification: `docs/phase-N/verification.md`, `docs/adr/`. Terminology: the plan
 `Organization` in the legacy code and `tenantId` in services; the plan's "supplier" is `Vendor`
 in legacy code and a `SUPPLIER` party in `svc-party`.
 
+**Laptop-only catalogue (2026-09-30):** products are laptop configurations identified by exactly eight
+spec masters (Brand, Model->Brand, Generation, Processor, RAM, SSD, GPU, Screen size) in svc-master
+`laptop_spec_options`; `POST /master/laptops` generates the SKU, refuses duplicate configurations and
+makes every laptop serialized + QC-required; specs travel on the product snapshot (`specs`) into PO,
+GRN, QC lot and inventory `item_refs`. Laptop QC lots require a per-serial `laptop` check (8 spec
+matches, powers on, missing parts, asset tag) with PASS / FAIL / HOLD; PASS only if everything matches,
+HOLD blocks the decision. Rules for the client: `docs/BUSINESS_LOGIC.md`. Do not add generic product
+categories back.
+
 Service rules (in addition to the non-negotiables below): every tenant table has `tenant_id` +
 RLS policy and every transaction starts with `setTenantContext`; stock moves only through
 svc-inventory's posting engine (zero-sum postings, idempotency key per document); document numbers

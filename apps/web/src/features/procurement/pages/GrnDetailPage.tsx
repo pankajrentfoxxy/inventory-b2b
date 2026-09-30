@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Ban, ChevronDown, ChevronRight, ClipboardCheck, PackageCheck, RefreshCw, Wrench } from 'lucide-react';
+import { Ban, ChevronDown, ChevronRight, ClipboardCheck, PackageCheck, RefreshCw, ShieldAlert, Wrench } from 'lucide-react';
 import { Button, Card, CardBody, CardHeader, DescriptionList, DetailSkeleton, ErrorState, PageHeader, ReasonDialog, StatusBadge } from '../../../components/ui';
 import { toApiError } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 import { formatDate, formatDateTime, formatMoney, formatQty, humanize } from '../../../lib/utils';
 import { AttachmentsCard } from '../components/AttachmentsCard';
+import { LineSpecs } from '../components/LineSpecs';
 import { StatusBanner } from '../components/ProgressBar';
 import { RetryPostingModal } from '../components/RetryPostingModal';
 import { useCancelGrn, useGrn, usePurchaseOrder, useReceiveGrn, useWarehouseDetail } from '../hooks';
@@ -19,8 +20,9 @@ function LineRow({ line, bins }: { line: GrnLine; bins: Map<string, string> }) {
       <tr className="align-top">
         <td className="px-4 py-3 text-slate-500 tabular">{line.lineNo}</td>
         <td className="px-4 py-3">
-          <p className="font-medium text-slate-900">{line.item.name}</p>
-          <p className="text-xs text-slate-500 font-mono">{line.item.sku}</p>
+          <p className="font-mono text-[13px] font-semibold text-slate-900">{line.item.sku}</p>
+          <p className="text-sm text-slate-700">{line.item.name}</p>
+          <LineSpecs specs={line.item.specs} className="mt-0.5 max-w-[420px]" />
           {line.conditionNote && <p className="text-xs text-amber-700 mt-0.5">{line.conditionNote}</p>}
         </td>
         <td className="px-4 py-3 text-right tabular">
@@ -74,7 +76,8 @@ export function GrnDetailPage() {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
   const grn = useGrn(id);
-  const po = usePurchaseOrder(grn.data?.poId);
+  // Only needed for GRNs created before `poNumber` was on the view.
+  const po = usePurchaseOrder(grn.data && !grn.data.poNumber ? grn.data.poId : undefined);
   const warehouse = useWarehouseDetail(grn.data?.warehouseId);
   const receive = useReceiveGrn();
   const cancel = useCancelGrn();
@@ -210,17 +213,23 @@ export function GrnDetailPage() {
             }
           />
         )}
+        {(g.status === 'RECEIVED' || g.status === 'QC_PENDING') && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-sm text-amber-800 flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 shrink-0" aria-hidden="true" />
+            <span>Received laptops are in QC hold and not available until QC passes.</span>
+          </div>
+        )}
         {g.status === 'CANCELLED' && <StatusBanner tone="danger" title="Cancelled" message={g.statusReason ?? undefined} />}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card>
-            <CardHeader title="Purchase order and supplier" />
+            <CardHeader title="Purchase order and vendor" />
             <CardBody>
               <DescriptionList
                 columns={1}
                 items={[
-                  { label: 'Purchase order', value: <Link to={`/purchases/orders/${g.poId}`} className="text-brand-700 hover:underline font-mono">{po.data?.number ?? 'Open order'}</Link> },
-                  { label: 'Supplier', value: g.supplier.displayName },
+                  { label: 'Purchase order', value: <Link to={`/purchases/orders/${g.poId}`} className="text-brand-700 hover:underline font-mono">{g.poNumber ?? po.data?.number ?? 'Open order'}</Link> },
+                  { label: 'Vendor', value: g.supplier.displayName },
                   { label: 'GSTIN', value: g.supplier.gstin, mono: true },
                 ]}
               />
@@ -239,7 +248,7 @@ export function GrnDetailPage() {
                 columns={1}
                 items={[
                   { label: 'Received date', value: formatDate(g.receivedDate) },
-                  { label: 'Supplier invoice', value: g.supplierInvoiceNo ? `${g.supplierInvoiceNo}${g.supplierInvoiceDate ? ` (${formatDate(g.supplierInvoiceDate)})` : ''}` : null },
+                  { label: 'Vendor invoice', value: g.supplierInvoiceNo ? `${g.supplierInvoiceNo}${g.supplierInvoiceDate ? ` (${formatDate(g.supplierInvoiceDate)})` : ''}` : null },
                   { label: 'Delivery note', value: g.deliveryNoteNo },
                   { label: 'Vehicle', value: g.vehicleNo, mono: true },
                   { label: 'Remarks', value: g.remarks },
@@ -250,13 +259,13 @@ export function GrnDetailPage() {
         </div>
 
         <Card className="overflow-hidden">
-          <CardHeader title="Lines" description={`${g.lines.length} line${g.lines.length === 1 ? '' : 's'}; expand a serialized line to see its serials.`} />
+          <CardHeader title="Laptops received" description={`${g.lines.length} line${g.lines.length === 1 ? '' : 's'}; expand the specs or the serials of a line for details.`} />
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-200">
                 <tr>
                   <th className="text-left px-4 py-2.5 font-semibold w-10">#</th>
-                  <th className="text-left px-4 py-2.5 font-semibold">Product</th>
+                  <th className="text-left px-4 py-2.5 font-semibold">Laptop (SKU)</th>
                   <th className="text-right px-4 py-2.5 font-semibold">Qty</th>
                   <th className="text-right px-4 py-2.5 font-semibold hidden md:table-cell">Unit cost</th>
                   <th className="text-left px-4 py-2.5 font-semibold hidden md:table-cell">Bin</th>

@@ -1,3 +1,5 @@
+import type { LaptopSpecs } from '../../components/LaptopSpecs';
+
 /**
  * Response shapes of svc-procurement (`poView`, `grnView`) and the lookups the module needs from
  * svc-master / svc-party. Snapshots are stored on the document at creation time and never change.
@@ -71,6 +73,8 @@ export interface ProductSnapshot {
   hsnCode: string | null;
   taxRate: number | null;
   status: string;
+  /** Laptop configurations only (the 8 specs); null / absent on legacy items. */
+  specs?: LaptopSpecs | null;
 }
 
 /* ---- lookups ------------------------------------------------------------------------------------ */

@@ -3,11 +3,15 @@ import { z } from 'zod';
 import { asyncHandler, authenticate, getContext, idempotent, ifMatchVersion, parseQuery, registerConsumer, requirePermission, requireService, requireTenant, requireUuidParams, validateBody, validateQuery, type ConsumerRuntime, type Logger, type SqlClient, type TokenVerifier } from '@b2b/platform-kit';
 import { EVENT_TYPES, rk } from '@b2b/contracts';
 import type { Tx } from '../db.js';
+import { partyFormSchema } from '@b2b/shared';
 import { PartyService, actorFrom, type PartyType } from './party.service.js';
+import type { PartyFormService } from './party.form.js';
 import { addressSchema, bankAccountSchema, contactSchema, listQuery, partyPatchSchema, partySchema, reasonSchema, statusSchema } from './party.schema.js';
 
 export interface PartyRouterDeps {
   service: PartyService;
+  /** The vendor-form shaped create / full update / read (optional for the internal router). */
+  forms?: PartyFormService;
   verifier: TokenVerifier;
   db: SqlClient;
   logger: Logger;
@@ -15,7 +19,7 @@ export interface PartyRouterDeps {
 
 const lookupQuery = z.object({ q: z.string().trim().max(100).optional() });
 
-export function createPartyRouter({ service, verifier, db, logger }: PartyRouterDeps) {
+export function createPartyRouter({ service, forms, verifier, db, logger }: PartyRouterDeps) {
   const router = Router();
   router.use(authenticate({ verifier, types: ['tenant'] }), requireTenant);
   requireUuidParams(router, 'id', 'subId');
@@ -27,6 +31,12 @@ export function createPartyRouter({ service, verifier, db, logger }: PartyRouter
     { path: 'suppliers', type: 'SUPPLIER' as PartyType, view: requirePermission('supplier.view', 'purchase.view', 'grn.view', 'billing.view'), manage: requirePermission('supplier.manage') },
     { path: 'customers', type: 'CUSTOMER' as PartyType, view: requirePermission('customer.view', 'sales.view', 'dispatch.view', 'billing.view'), manage: requirePermission('customer.manage') },
   ]) {
+    if (forms) {
+      // Vendor-form endpoints: same fields and save logic as the legacy vendor form.
+      router.post(`/${path}/form`, manage, validateBody(partyFormSchema), idem(`POST /party/${path}/form`), asyncHandler(async (req, res) => res.status(201).json({ data: await forms.create(tenantOf(req), actor(req), type, req.body) })));
+      router.get(`/${path}/:id/form`, view, asyncHandler(async (req, res) => res.json({ data: await forms.get(tenantOf(req), type, req.params.id) })));
+      router.put(`/${path}/:id/form`, manage, validateBody(partyFormSchema), asyncHandler(async (req, res) => res.json({ data: await forms.update(tenantOf(req), actor(req), type, req.params.id, req.body, ifMatchVersion(req)) })));
+    }
     router.get(`/${path}`, view, validateQuery(listQuery), asyncHandler(async (req, res) => res.json(await service.list(tenantOf(req), type, parseQuery<typeof listQuery>(res)))));
     router.get(`/lookups/${path}`, view, validateQuery(lookupQuery), asyncHandler(async (req, res) => res.json({ data: await service.lookup(tenantOf(req), type, parseQuery<typeof lookupQuery>(res).q) })));
     router.post(`/${path}`, manage, validateBody(partySchema), idem(`POST /party/${path}`), asyncHandler(async (req, res) => res.status(201).json({ data: await service.create(tenantOf(req), actor(req), type, req.body) })));

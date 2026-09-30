@@ -6,6 +6,10 @@ import type {
   CursorPage,
   DocType,
   ImportResult,
+  LaptopPatch,
+  LaptopPayload,
+  LaptopPreview,
+  LaptopSpecIds,
   Location,
   LocationPayload,
   NumberingConfig,
@@ -18,6 +22,10 @@ import type {
   ProductSnapshot,
   SimpleKind,
   SimpleRowMap,
+  SpecListParams,
+  SpecOption,
+  SpecOptionPayload,
+  SpecStatus,
   Warehouse,
   WarehousePatch,
   WarehousePayload,
@@ -46,6 +54,16 @@ export const masterApi = {
   patchProduct: (id: string, patch: ProductPatch, version: number) => api.patch<{ data: Product }>(`${BASE}/products/${id}`, patch, ifMatch(version)).then(unwrap),
   transitionProduct: (id: string, command: 'activate' | 'deactivate' | 'archive', reason?: string) => api.post<{ data: Product }>(`${BASE}/products/${id}/${command}`, { reason: reason || undefined }).then(unwrap),
   deleteProduct: (id: string) => api.delete<{ data: { id: string; deleted: boolean } }>(`${BASE}/products/${id}`).then(unwrap),
+
+  /* laptop specification masters */
+  listSpecs: (params: SpecListParams) => api.get<{ data: SpecOption[] }>(`${BASE}/laptop-specs`, { params: clean({ kind: params.kind, brandId: params.brandId, includeInactive: params.includeInactive ? 'true' : undefined }) }).then(unwrap),
+  createSpec: (payload: SpecOptionPayload) => api.post<{ data: SpecOption }>(`${BASE}/laptop-specs`, clean(payload)).then(unwrap),
+  setSpecStatus: (id: string, status: SpecStatus) => api.post<{ data: SpecOption }>(`${BASE}/laptop-specs/${id}/status`, { status }).then(unwrap),
+
+  /* laptop configurations */
+  previewLaptop: (ids: LaptopSpecIds) => api.post<{ data: LaptopPreview }>(`${BASE}/laptops/preview`, ids).then(unwrap),
+  createLaptop: (payload: LaptopPayload, idempotencyKey: string) => api.post<{ data: Product }>(`${BASE}/laptops`, payload, withIdempotencyKey(idempotencyKey)).then(unwrap),
+  patchLaptop: (id: string, patch: LaptopPatch, version: number) => api.patch<{ data: Product }>(`${BASE}/laptops/${id}`, patch, ifMatch(version)).then(unwrap),
 
   /* warehouses */
   listWarehouses: () => api.get<{ data: Warehouse[] }>(`${BASE}/warehouses`).then(unwrap),

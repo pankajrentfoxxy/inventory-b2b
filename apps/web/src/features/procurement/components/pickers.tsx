@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { SearchSelect, Select } from '../../../components/ui';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
+import { specsSummary } from '../../../components/LaptopSpecs';
 import { useProductLookup, useScopedWarehouses, useSupplierLookup } from '../hooks';
 import type { ProductSnapshot, SupplierSnapshot, WarehouseLookup } from '../types';
 
 /** Async supplier picker over GET /v1/party/lookups/suppliers (active suppliers only). */
-export function SupplierPicker({ value, onChange, selectedLabel, error, disabled, allowClear, placeholder = 'Select a supplier', size }: { value: string; onChange: (id: string, supplier: SupplierSnapshot | null) => void; selectedLabel?: string; error?: boolean; disabled?: boolean; allowClear?: boolean; placeholder?: string; size?: 'sm' | 'md' }) {
+export function SupplierPicker({ value, onChange, selectedLabel, error, disabled, allowClear, placeholder = 'Select a vendor', size }: { value: string; onChange: (id: string, vendor: SupplierSnapshot | null) => void; selectedLabel?: string; error?: boolean; disabled?: boolean; allowClear?: boolean; placeholder?: string; size?: 'sm' | 'md' }) {
   const [term, setTerm] = useState('');
   const suppliers = useSupplierLookup(useDebouncedValue(term, 250));
   const rows = suppliers.data ?? [];
@@ -21,14 +22,14 @@ export function SupplierPicker({ value, onChange, selectedLabel, error, disabled
       disabled={disabled}
       allowClear={allowClear}
       size={size}
-      emptyText={suppliers.isError ? 'Could not load suppliers' : term ? `No suppliers match "${term}"` : 'No active suppliers'}
+      emptyText={suppliers.isError ? 'Could not load vendors' : term ? `No vendors match "${term}"` : 'No active vendors'}
       options={rows.map((s) => ({ value: s.id, label: s.displayName, description: [s.code, s.gstin ?? 'No GSTIN', s.stateCode ? `State ${s.stateCode}` : null].filter(Boolean).join(' - ') }))}
     />
   );
 }
 
-/** Async product typeahead over GET /v1/master/lookups/products?status=ACTIVE. */
-export function ProductPicker({ value, onChange, selectedLabel, error, disabled, placeholder = 'Type to search products', size }: { value: string; onChange: (id: string, product: ProductSnapshot | null) => void; selectedLabel?: string; error?: boolean; disabled?: boolean; placeholder?: string; size?: 'sm' | 'md' }) {
+/** Laptop (SKU) typeahead over GET /v1/master/lookups/products?status=ACTIVE. Options read "SKU - Name" with the spec summary below. */
+export function ProductPicker({ value, onChange, selectedLabel, error, disabled, placeholder = 'Search laptops by SKU, model or spec', size }: { value: string; onChange: (id: string, product: ProductSnapshot | null) => void; selectedLabel?: string; error?: boolean; disabled?: boolean; placeholder?: string; size?: 'sm' | 'md' }) {
   const [term, setTerm] = useState('');
   const products = useProductLookup(useDebouncedValue(term, 250));
   const rows = products.data ?? [];
@@ -43,8 +44,12 @@ export function ProductPicker({ value, onChange, selectedLabel, error, disabled,
       error={error}
       disabled={disabled}
       size={size}
-      emptyText={products.isError ? 'Could not load products' : term ? `No products match "${term}"` : 'No active products'}
-      options={rows.map((p) => ({ value: p.id, label: p.name, description: [p.sku, p.taxRate !== null ? `GST ${p.taxRate}%` : 'No tax', p.isSerialized ? 'Serialized' : null].filter(Boolean).join(' - ') }))}
+      emptyText={products.isError ? 'Could not load laptops' : term ? `No laptops match "${term}"` : 'No active laptop configurations'}
+      options={rows.map((p) => ({
+        value: p.id,
+        label: `${p.sku} - ${p.name}`,
+        description: specsSummary(p.specs) || [p.taxRate !== null ? `GST ${p.taxRate}%` : 'No tax', p.isSerialized ? 'Serialized' : null].filter(Boolean).join(' - '),
+      }))}
     />
   );
 }

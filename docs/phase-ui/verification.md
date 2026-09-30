@@ -54,6 +54,17 @@ remain mounted under "Legacy" in the sidebar until cut-over. Conventions the mod
 | Auth smoke through a second gateway (`:4011`) against the live services | admin login with MFA enrolment and TOTP, tenant created -> approved by a second reviewer (four-eyes) -> activated, owner invitation accepted, owner login returns a tenant token with 56 permissions and the refresh cookie, `/me/tenants` lists the tenant, `/iam/me` 200, seeded units and warehouse visible, empty lists 200 for products / suppliers / stock / POs / lots, refresh issues a new token |
 | Service suites after the UI-driven backend changes | svc-auth 19, svc-iam 11, svc-inventory 15, svc-notification 4: pass |
 
+## Laptop-only catalogue (added 2026-09-30)
+
+| Area | What changed | Verified by |
+|---|---|---|
+| svc-master | `laptop_spec_options` (8 kinds, RLS, model belongs to brand, unique per kind), products gain 8 spec FKs + `specs` + unique `config_key` (migration `20261002000000_laptop_configurations`); `GET/POST /laptop-specs`, `POST /laptops/preview`, `POST /laptops` (generated SKU, duplicate guard, serialized + QC-required, GST 18% default), `PATCH /laptops/:id` (specs editable only in DRAFT, SKU / default name follow the specs); defaults seeded on activation; `npm run seed:laptop-specs -w @b2b/svc-master` backfills existing tenants | `test/laptop.test.ts` (7 cases), svc-master 16 pass |
+| contracts | `LAPTOP_SPEC_FIELDS`, `laptopSpecs`, `productSnapshot.specs` | typecheck |
+| svc-inventory | `item_refs.specs` (migration `20261002000000_item_ref_specs`); specs on stock rows, stock item, serial detail; stock search matches spec text | svc-inventory 15 pass |
+| svc-qc | unit result HOLD, `laptop_check` column (migration `20261002000000_laptop_qc`); laptop lots require the check; PASS only when all 8 specs match, powers on, nothing missing; FAIL auto-records SPEC_MISMATCH / NO_POWER / MISSING_PARTS; HOLD needs remarks and blocks decide (`QC_UNITS_ON_HOLD`); lot view `isLaptop`, `expectedSpecs`, progress passed / failed / onHold | svc-qc 4 pass |
+| End to end | configuration -> PO 10 (specs on line, no stock) -> GRN 10 serials (QC hold 10, available 0, specs on stock) -> auto QC lot with expected specs -> rule violations refused -> 8 pass, 1 fail (RAM 8 GB), 1 hold -> decide blocked -> hold resolved -> AVAILABLE 9, REJECTED 1 -> lot CLOSED, GRN QC_COMPLETED, PO CLOSED -> serial traces to lot, GRN, PO and specs | `apps/svc-procurement/test/laptop-e2e.test.ts`, svc-procurement 9 pass |
+| Web | Laptop specifications page (8 cards), Laptop configurations list / create (8 pickers, live SKU preview, duplicate banner) / detail (spec lock after activation); PO editor and detail, GRN create / detail / list, QC lot list, QC laptop inspection panel (match / mismatch per spec, power, missing parts, asset tag, PASS / FAIL / HOLD, decide blocked while on hold), stock list / item, serial traceability card; generic product creation and the categories page removed | web typecheck + build |
+
 ## Known gaps (UI)
 
 - Members show "Joined" instead of "Last activity" (the service does not track it).

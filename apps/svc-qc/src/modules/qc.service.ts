@@ -4,7 +4,7 @@
  * svc-inventory and the lot closes on `inventory.qc_posting.recorded.v1`. Items with
  * `qcRequired=false` are auto-decided PASS by the system so every unit passes through one ledger path.
  */
-import { EVENT_TYPES, type ReceiptPostedPayload } from '@b2b/contracts';
+import { EVENT_TYPES, LAPTOP_SPEC_FIELDS, type LaptopSpecs, type ReceiptPostedPayload } from '@b2b/contracts';
 import { businessRuleError, conflict, enqueueEvent, forbidden, inWarehouseScope, nextDocumentNumber, notFound, setTenantContext, uuidv7, type NumberingSource, type TenantContext } from '@b2b/platform-kit';
 import { Prisma, type PrismaClient, type Tx } from '../db.js';
 import type { ChecklistInput, DecideInput, ResultsInput } from './qc.schema.js';
@@ -110,11 +110,20 @@ export class QcService {
       if (lot.status === 'DECIDED') throw conflict('Lot is already decided; reopen it first', 'QC_INVALID_TRANSITION');
       const checklist = lot.checklistId ? await tx.qcChecklist.findUnique({ where: { id: lot.checklistId }, include: { items: true } }) : null;
       const defects = new Set((await tx.qcDefectCode.findMany({ where: { tenantId: ctx.tenantId!, status: 'ACTIVE' } })).map((d) => d.code));
+      const expected = laptopSpecsOf(lot);
       for (const [i, r] of input.results.entries()) {
         const label = lot.mode === 'SERIAL' ? r.serialNo : r.serialNo ?? `sample-${i + 1}`;
         if (!label) throw businessRuleError('QC_RESULTS_INCOMPLETE', 'Serial number is required for serialized lots', [{ path: `results.${i}.serialNo`, message: 'Serial is required' }]);
         if (lot.mode === 'SERIAL' && !lot.serials.some((s) => s.toUpperCase() === label.toUpperCase())) throw businessRuleError('QC_RESULTS_INCOMPLETE', `Serial ${label} is not part of this lot`, [{ path: `results.${i}.serialNo`, message: 'Not in this lot' }]);
-        let result = r.result;
+        let result: string = r.result;
+        const systemDefects: string[] = [];
+        if (expected) {
+          const outcome = checkLaptop(r, i, label ?? '');
+          result = outcome.result;
+          systemDefects.push(...outcome.defects);
+        } else if (r.result === 'HOLD') {
+          throw businessRuleError('VALIDATION_FAILED', 'HOLD is available for laptop lots only', [{ path: `results.${i}.result`, message: 'Use PASS or FAIL' }]);
+        }
         if (checklist) {
           for (const item of checklist.items) {
             const answer = r.checklistAnswers[item.id] ?? r.checklistAnswers[item.label];
@@ -122,13 +131,15 @@ export class QcService {
             if (item.kind === 'NUMERIC' && typeof answer === 'number' && item.critical && ((item.minValue !== null && answer < Number(item.minValue)) || (item.maxValue !== null && answer > Number(item.maxValue)))) result = 'FAIL';
           }
         }
-        if (result === 'FAIL' && r.defectCodes.length === 0) throw businessRuleError('QC_DEFECT_REQUIRED', `A failed unit needs at least one defect code (${label})`, [{ path: `results.${i}.defectCodes`, message: 'Defect code is required' }]);
+        const defectCodes = [...new Set([...systemDefects, ...r.defectCodes])];
+        if (result === 'FAIL' && defectCodes.length === 0) throw businessRuleError('QC_DEFECT_REQUIRED', `A failed unit needs at least one defect code (${label})`, [{ path: `results.${i}.defectCodes`, message: 'Defect code is required' }]);
         for (const d of r.defectCodes) if (defects.size && !defects.has(d)) throw businessRuleError('QC_DEFECT_REQUIRED', `Unknown defect code ${d}`, [{ path: `results.${i}.defectCodes`, message: `Unknown code ${d}` }]);
         const canonical = lot.mode === 'SERIAL' ? lot.serials.find((s) => s.toUpperCase() === label.toUpperCase())! : label;
+        const laptopCheck = expected && r.laptop ? (r.laptop as unknown as Prisma.InputJsonValue) : Prisma.DbNull;
         await tx.qcUnitResult.upsert({
           where: { lotId_serialNo: { lotId: id, serialNo: canonical } },
-          update: { result, gradeCode: r.gradeCode ?? null, defectCodes: r.defectCodes, remarks: r.remarks ?? null, checklistAnswers: r.checklistAnswers as Prisma.InputJsonValue, inspectedBy: actor.userId ?? '00000000-0000-0000-0000-000000000000', inspectedAt: new Date() },
-          create: { id: uuidv7(), tenantId: ctx.tenantId!, lotId: id, serialNo: canonical, result, gradeCode: r.gradeCode ?? null, defectCodes: r.defectCodes, remarks: r.remarks ?? null, checklistAnswers: r.checklistAnswers as Prisma.InputJsonValue, inspectedBy: actor.userId ?? '00000000-0000-0000-0000-000000000000' },
+          update: { result, gradeCode: r.gradeCode ?? null, defectCodes, remarks: r.remarks ?? null, checklistAnswers: r.checklistAnswers as Prisma.InputJsonValue, laptopCheck, inspectedBy: actor.userId ?? '00000000-0000-0000-0000-000000000000', inspectedAt: new Date() },
+          create: { id: uuidv7(), tenantId: ctx.tenantId!, lotId: id, serialNo: canonical, result, gradeCode: r.gradeCode ?? null, defectCodes, remarks: r.remarks ?? null, checklistAnswers: r.checklistAnswers as Prisma.InputJsonValue, laptopCheck, inspectedBy: actor.userId ?? '00000000-0000-0000-0000-000000000000' },
         });
       }
       const data: Prisma.QcLotUpdateInput = { version: { increment: 1 } };
@@ -157,6 +168,8 @@ export class QcService {
       const results = await tx.qcUnitResult.findMany({ where: { lotId: lot.id } });
       const missing = lot.serials.filter((s) => !results.some((r) => r.serialNo === s));
       if (missing.length) throw businessRuleError('QC_RESULTS_INCOMPLETE', `${missing.length} serial(s) have no result yet`, [{ path: 'results', message: missing.slice(0, 20).join(', ') }]);
+      const held = results.filter((r) => r.result === 'HOLD').map((r) => r.serialNo);
+      if (held.length) throw businessRuleError('QC_UNITS_ON_HOLD', `${held.length} laptop(s) are on hold; pass or fail them before deciding the lot`, [{ path: 'results', message: held.slice(0, 20).join(', ') }]);
       serials = lot.serials.map((s) => {
         const r = results.find((x) => x.serialNo === s)!;
         return { serialNo: s, result: r.result as 'PASS' | 'FAIL', gradeCode: r.gradeCode ?? input.gradeCode ?? null, defectCodes: r.defectCodes };
@@ -231,8 +244,10 @@ export class QcService {
       id: l.id, number: l.number, sourceType: l.sourceType, sourceId: l.sourceId, sourceLineId: l.sourceLineId, sourceNumber: l.sourceNumber, itemId: l.itemId, item: l.itemSnapshot, warehouseId: l.warehouseId, binId: l.binId,
       mode: l.mode, qty: Number(l.qty), passQty: Number(l.passQty), failQty: Number(l.failQty), serials: l.serials, checklistId: l.checklistId, checklistVersion: l.checklistVersion,
       status: l.status, statusReason: l.statusReason, inspectorId: l.inspectorId, startedAt: l.startedAt, decidedAt: l.decidedAt, decidedBy: l.decidedBy, postingIds: l.postingIds, closedAt: l.closedAt, createdAt: l.createdAt, updatedAt: l.updatedAt, version: l.version,
-      results: (l.results ?? []).map((r) => ({ id: r.id, serialNo: r.serialNo, result: r.result, gradeCode: r.gradeCode, defectCodes: r.defectCodes, remarks: r.remarks, checklistAnswers: r.checklistAnswers, inspectedBy: r.inspectedBy, inspectedAt: r.inspectedAt })),
-      progress: l.mode === 'SERIAL' ? { inspected: (l.results ?? []).length, total: l.serials.length } : null,
+      isLaptop: Boolean(laptopSpecsOf(l)),
+      expectedSpecs: laptopSpecsOf(l),
+      results: (l.results ?? []).map((r) => ({ id: r.id, serialNo: r.serialNo, result: r.result, gradeCode: r.gradeCode, defectCodes: r.defectCodes, remarks: r.remarks, checklistAnswers: r.checklistAnswers, laptopCheck: r.laptopCheck ?? null, inspectedBy: r.inspectedBy, inspectedAt: r.inspectedAt })),
+      progress: l.mode === 'SERIAL' ? { inspected: (l.results ?? []).length, total: l.serials.length, passed: (l.results ?? []).filter((r) => r.result === 'PASS').length, failed: (l.results ?? []).filter((r) => r.result === 'FAIL').length, onHold: (l.results ?? []).filter((r) => r.result === 'HOLD').length } : null,
     };
   }
 
@@ -303,4 +318,37 @@ export class QcService {
   requireScope(ctx: TenantContext, warehouseId: string) {
     if (!inWarehouseScope(ctx, warehouseId)) throw forbidden('This warehouse is outside your scope', 'WAREHOUSE_SCOPE');
   }
+}
+
+/* ---- laptop QC ---------------------------------------------------------------------------- */
+
+/** The eight specs the lot was ordered with (from the item snapshot); null for non-laptop items. */
+function laptopSpecsOf(lot: { itemSnapshot: unknown }): LaptopSpecs | null {
+  const specs = (lot.itemSnapshot as { specs?: LaptopSpecs | null } | null)?.specs;
+  return specs && typeof specs === 'object' ? specs : null;
+}
+
+/**
+ * A laptop may PASS only when all eight specs match the ordered configuration, it powers on and no
+ * part is missing. FAIL records why (spec mismatch, no power, missing parts are added as defect codes
+ * automatically). HOLD needs a remark and keeps the unit in QC hold until it is resolved.
+ */
+function checkLaptop(r: ResultsInput['results'][number], i: number, label: string): { result: 'PASS' | 'FAIL' | 'HOLD'; defects: string[] } {
+  if (!r.laptop) throw businessRuleError('QC_LAPTOP_CHECK_REQUIRED', `Verify the laptop specifications for ${label}`, [{ path: `results.${i}.laptop`, message: 'Laptop check is required' }]);
+  const problems: { path: string; message: string }[] = [];
+  const mismatched = LAPTOP_SPEC_FIELDS.filter((f) => !r.laptop!.specChecks[f.key].match);
+  for (const f of mismatched) {
+    if (!r.laptop.specChecks[f.key].actual) problems.push({ path: `results.${i}.laptop.specChecks.${f.key}.actual`, message: `Enter the ${f.label.toLowerCase()} found on the laptop` });
+  }
+  const defects: string[] = [];
+  if (mismatched.length) defects.push('SPEC_MISMATCH');
+  if (!r.laptop.powersOn) defects.push('NO_POWER');
+  if (r.laptop.missingParts.length) defects.push('MISSING_PARTS');
+  if (r.result === 'PASS' && defects.length) {
+    const why = [mismatched.length ? `${mismatched.map((f) => f.label).join(', ')} do not match` : null, !r.laptop.powersOn ? 'it does not power on' : null, r.laptop.missingParts.length ? `parts are missing (${r.laptop.missingParts.join(', ')})` : null].filter(Boolean).join('; ');
+    problems.push({ path: `results.${i}.result`, message: `Cannot pass ${label}: ${why}` });
+  }
+  if (r.result === 'HOLD' && !r.remarks) problems.push({ path: `results.${i}.remarks`, message: 'Say why the laptop is on hold' });
+  if (problems.length) throw businessRuleError('QC_LAPTOP_CHECK_FAILED', problems[0].message, problems);
+  return { result: r.result, defects: r.result === 'FAIL' ? defects : [] };
 }

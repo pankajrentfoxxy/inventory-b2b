@@ -209,8 +209,8 @@ function TopBar({ onMenu, variant }: { onMenu: () => void; variant: LayoutVarian
     : [
         { key: 'po', label: 'Purchase Order', icon: ClipboardList, onSelect: () => navigate('/purchases/orders/new'), hidden: !hasPermission('purchase.create') },
         { key: 'grn', label: 'Goods Receipt', icon: PackageCheck, onSelect: () => navigate('/purchases/receipts/new'), hidden: !hasPermission('grn.create') },
-        { key: 'product', label: 'Product', icon: Package, onSelect: () => navigate('/masters/products?new=1'), hidden: !hasPermission('master.manage') },
-        { key: 'supplier', label: 'Supplier', icon: Truck, onSelect: () => navigate('/parties/suppliers/new'), hidden: !hasPermission('supplier.manage') },
+        { key: 'product', label: 'Laptop configuration', icon: Package, onSelect: () => navigate('/masters/products?new=1'), hidden: !hasPermission('master.manage') },
+        { key: 'supplier', label: 'Vendor', icon: Truck, onSelect: () => navigate('/parties/vendors/new'), hidden: !hasPermission('supplier.manage') },
         { key: 'customer', label: 'Customer', icon: Users, onSelect: () => navigate('/parties/customers/new'), hidden: !hasPermission('customer.manage') },
         { key: 'adjustment', label: 'Stock Adjustment', icon: SlidersHorizontal, onSelect: () => navigate('/inventory/adjustments/new'), hidden: !hasPermission('inventory.adjust') },
       ];

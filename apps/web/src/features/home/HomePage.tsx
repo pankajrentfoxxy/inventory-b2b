@@ -37,7 +37,7 @@ export function HomePage() {
     hasPermission('purchase.create') && { label: 'New purchase order', to: '/purchases/orders/new', icon: ClipboardList },
     hasPermission('grn.create') && { label: 'Receive goods', to: '/purchases/receipts/new', icon: PackageCheck },
     hasPermission('inventory.view') && { label: 'Stock on hand', to: '/inventory/stock', icon: Boxes },
-    hasPermission('supplier.view') && { label: 'Suppliers', to: '/parties/suppliers', icon: Truck },
+    hasPermission('supplier.view') && { label: 'Vendors', to: '/parties/vendors', icon: Truck },
     hasPermission('qc.view') && { label: 'QC queue', to: '/qc/lots', icon: ClipboardCheck },
   ].filter(Boolean) as { label: string; to: string; icon: typeof ClipboardList }[];
 

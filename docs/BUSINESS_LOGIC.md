@@ -1,6 +1,16 @@
 # Rentfoxxy B2B Inventory Platform - Business Rules
 
-Version 1.0 - 30 September 2026
+Version 1.1 - 30 September 2026 (laptop configurations and laptop QC)
+
+The platform is a **multi-tenant laptop inventory system**. Every item bought, received, inspected
+and stocked is a laptop configuration identified by eight specifications. The end-to-end flow is:
+
+```
+Laptop specification masters -> Laptop configuration (SKU) -> Purchase order -> Goods receipt (GRN)
+  -> QC ticket (created automatically) -> QC per laptop -> PASS: Available inventory
+                                                        -> FAIL: Rejected (never available)
+                                                        -> HOLD: stays in QC hold until resolved
+```
 
 This document describes what the platform does and the business rules it enforces, in the order a
 business would meet them: onboarding, people and access, master data, suppliers and customers,
@@ -136,22 +146,47 @@ permissions (approvals, bank-detail reveal, role management) are marked as such 
 
 Master data is set up once per organisation and referenced everywhere else. Defaults are seeded when
 the organisation is activated (standard units, GST slabs, a first warehouse, common payment terms,
-document numbering).
+document numbering, and common laptop specification values).
 
-### 5.1 Products
+### 5.1 Laptop specification masters
+
+A laptop is described by exactly eight specifications. Each one is chosen from its own master list,
+so values are consistent everywhere and never typed free-hand on a document.
+
+| Master | Examples | Notes |
+|---|---|---|
+| Brand | Dell, HP, Lenovo | Seeded with common brands |
+| Model | Latitude 5440, ProBook 440 G8 | **Belongs to a brand**; the same model name may exist under two brands |
+| Generation | 11th Gen, 13th Gen | Seeded 8th to 14th Gen |
+| Processor | Intel Core i5-1345U | Added by the organisation |
+| RAM | 8 GB, 16 GB | Seeded 4 to 64 GB |
+| SSD | 256 GB, 512 GB, 1 TB | Seeded 128 GB to 2 TB |
+| Graphics / GPU | Intel Iris Xe, NVIDIA RTX A500 | Added by the organisation |
+| Screen size | 14", 15.6" | Seeded 13.3" to 16" |
+
+Rules, all **enforced by the system**: a value is unique within its master (ignoring letter case;
+models per brand); each value has a short **code** used to build SKUs (for example I5 for "Intel
+Core i5-1345U"; derived from the name when not given); values can be deactivated but not deleted,
+and inactive values cannot be used on new configurations.
+
+### 5.2 Laptop configurations (SKUs)
+
+A laptop configuration is one purchasable variant: one value from each of the eight masters.
 
 | Rule | Detail |
 |---|---|
-| Unique SKU | SKUs are unique within the organisation, ignoring letter case. |
-| Product types | Goods or services. **Services never track stock.** |
-| Tracking rules | A serialised product must track stock. A product that requires IMEI must be serialised. A serial pattern can be set so serial numbers are validated on receipt. |
-| Tax | Each product carries an HSN/SAC code and a GST rate from the organisation's tax master; the rate is copied onto documents at the time they are created. |
-| Lifecycle | Draft -> Active -> Inactive -> Archived. Only active products can be bought or received. Archived products are frozen. |
-| Locked fields | Once a product has stock movements, its type, unit, tracking and serialisation settings are locked. |
-| Deletion | A product can be deleted only while it is a draft and is not referenced by any purchase order, stock movement or other document. Otherwise it is made inactive or archived. |
-| Quality control | Each product can be flagged as requiring QC on receipt. Products flagged as not requiring QC pass automatically. |
+| All eight specifications | A configuration must have exactly one Brand, Model, Generation, Processor, RAM, SSD, Graphics and Screen size. The model must belong to the chosen brand. |
+| Generated SKU | The system builds the SKU from Brand-Model-Processor-RAM-SSD codes, for example **DELL-LAT5440-I5-16-512**. If that SKU is taken (two configurations that differ only in generation, graphics or screen) it adds -2, -3 and so on. A SKU can also be entered manually; it must be unique ignoring letter case. |
+| No duplicate configurations | Two configurations with the same eight specifications cannot exist. The system shows the existing SKU before saving. |
+| Name | Defaults to Brand + Model (for example "Dell Latitude 5440"); can be changed. |
+| Always tracked | Every laptop is tracked in stock, **serialised** (one serial number per physical laptop) and **requires QC** on receipt. |
+| Tax | GST 18% by default; HSN and tax can be changed. The rate is copied onto documents when they are created. |
+| Lifecycle | Draft -> Active -> Inactive -> Archived. Only active configurations can be bought or received. |
+| Specifications are fixed | Specifications can be edited only while the configuration is a draft. Once active they are locked; a different variant is a new configuration. Prices, tax, HSN and name stay editable. |
+| Deletion | Only drafts that no document references can be deleted; otherwise archive. |
+| Snapshots | Purchase orders, goods receipts, QC tickets and stock copy the SKU and the eight specifications at the time they are created, so later master changes never alter them. |
 
-### 5.2 Warehouses, locations and bins
+### 5.3 Warehouses, locations and bins
 
 - Any number of warehouses; exactly **one default** warehouse at a time.
 - Each warehouse has a GST state code taken from its address; this decides whether a purchase is
@@ -159,13 +194,14 @@ document numbering).
 - Warehouses contain locations, which contain bins. Bins are optional: stock can be held "unbinned".
 - Warehouses and bins can be deactivated; inactive ones cannot receive stock.
 
-### 5.3 Other masters
+### 5.4 Other masters
 
 Units of measure; GST tax rates (standard slabs plus cess, with effective dates); HSN/SAC codes with
-a default tax rate; categories (a tree) and brands; condition grades (used by QC); warranty
-policies; payment terms; custom fields (extra attributes on documents and parties).
+a default tax rate; condition grades (used by QC); warranty policies; payment terms; custom fields
+(extra attributes on documents and parties). There is no generic product category hierarchy: the
+catalogue is laptops only.
 
-### 5.4 Document numbering
+### 5.5 Document numbering
 
 Each document type (purchase order, goods receipt, adjustment, QC lot, and so on) has a numbering
 format such as `PO/{FY}/0001`, supporting the financial year and calendar year placeholders. Numbers
@@ -219,10 +255,12 @@ Rules, all **enforced by the system**:
 - **Allowed movements are fixed.** For example stock cannot go from Rejected to Available without a
   new QC decision, and goods cannot become Available without passing through QC hold unless the
   product does not require QC.
-- **Serialised items move one unit at a time.** Each serial number is unique per product within the
-  organisation (IMEIs are unique organisation-wide), follows the product's serial pattern if one is
-  set, and carries its own history: received on which order and receipt, inspected in which lot,
-  passed or failed, where it is now.
+- **Every laptop is tracked by serial number.** Each serial number is unique per configuration within
+  the organisation, follows the configuration's serial pattern if one is set, and is fully
+  traceable: current stock bucket -> QC ticket and result -> goods receipt -> purchase order ->
+  supplier -> laptop SKU -> the eight specifications.
+- **Stock is kept per laptop SKU** and shows the specifications with the quantities in QC hold,
+  Available and Rejected.
 - **Valuation** is weighted average cost per product, updated on every inbound posting.
 
 ### 7.2 Opening stock
@@ -278,7 +316,10 @@ quantity on hand; it only relocates stock and is recorded in the ledger like any
 
 Rules, all **enforced by the system**:
 
-- **Supplier and product checks.** Only active suppliers and active products can be on an order;
+- **Lines select a laptop SKU.** Each line picks an existing laptop configuration; its eight
+  specifications are shown automatically and are never typed on the order. **A purchase order never
+  changes stock**: inventory only moves when goods are received and then pass QC.
+- **Supplier and SKU checks.** Only active suppliers and active laptop configurations can be on an order;
   the supplier is re-checked when the order is submitted.
 - **Prices, tax and totals are fixed at order time.** Each line records the product name, HSN/SAC,
   unit and GST rate as they were when the line was saved. Later master changes never alter an
@@ -336,9 +377,10 @@ Rules, all **enforced by the system**:
 
 ### 9.1 Lots
 
-A QC lot is created automatically for every goods-receipt line that requires inspection. A lot is
-either **quantity mode** (bulk goods: record how many passed and failed) or **serial mode** (each
-serial is inspected and recorded individually).
+A QC lot (the **QC ticket**) is created automatically for every goods-receipt line as soon as the
+receipt is posted, and appears in the QC queue. It records the GRN, the laptop SKU, the expected
+eight specifications, the quantity and the serial numbers received. Laptops are always inspected in
+**serial mode**: each physical laptop gets its own result.
 
 | Status | Meaning |
 |---|---|
@@ -348,7 +390,33 @@ serial is inspected and recorded individually).
 | Closed | Stock moved: passed units to Available, failed units to Rejected |
 | Cancelled | Released because the receipt was cancelled before inspection |
 
-### 9.2 Rules (enforced by the system)
+### 9.2 Laptop inspection
+
+For every serial number the inspector records:
+
+| Check | What is recorded |
+|---|---|
+| Specifications | Each of the eight specifications is marked **Match** or **Mismatch** against the configuration that was ordered. A mismatch requires the actual value found (for example RAM: 8 GB instead of 16 GB). |
+| Powers on | Yes or No. |
+| Missing parts | Charger, battery, RAM, SSD, keyboard keys, back panel, screws, other. |
+| Asset tag | Optional internal tag (for example TTSPL6047). |
+| Condition grade | From the condition grade master (New, A+, A, B, C, Scrap). |
+| Result | **PASS**, **FAIL** or **HOLD**, with remarks. |
+
+Rules, all **enforced by the system**:
+
+- **PASS only when the laptop is exactly what was ordered.** All eight specifications must match, the
+  laptop must power on and no part may be missing.
+- **FAIL records why.** A specification mismatch, no power or missing parts are recorded as defect
+  codes automatically (SPEC_MISMATCH, NO_POWER, MISSING_PARTS). A failure for another reason (for
+  example a cracked screen) needs a defect code chosen by the inspector.
+- **HOLD needs a reason** and keeps the laptop in QC hold. It is not available and not rejected.
+- **A ticket cannot be decided while any laptop is on hold or not yet inspected.** Held laptops must
+  be passed or failed first.
+- **Only passed laptops become Available inventory.** Example: 10 received, 9 pass, 1 fails: Available
+  9, Rejected 1. The failed laptop can never be reserved or sold.
+
+### 9.3 General QC rules (enforced by the system)
 
 - **Checklists.** Each product can have a checklist (pass/fail, numeric with a range, text or photo
   items). Items can be marked **critical**: a failed critical item forces the unit or lot to fail.
@@ -400,11 +468,12 @@ foundation they will build on.
 |---|---|
 | Organisation | Pending, Approved, Active, Suspended, Deactivated, Rejected |
 | Member | Invited, Active, Suspended, Removed |
-| Product | Draft, Active, Inactive, Archived |
+| Laptop configuration | Draft, Active, Inactive, Archived |
 | Party | Active, Inactive, Blocked |
 | Purchase order | Draft, Pending approval, Approved, Issued, Partially received, Received, Closed, Cancelled |
 | Goods receipt | Draft, Received, QC pending, QC completed, Posting failed, Cancellation pending, Cancelled |
-| QC lot | Open, In inspection, Decided, Closed, Cancelled |
+| QC ticket (lot) | Open, In inspection, Decided, Closed, Cancelled |
+| Laptop QC result | Pass, Fail, Hold |
 | Adjustment | Draft, Pending approval, Posted, Cancelled |
 
 ## Appendix B - Who can do what (system roles)

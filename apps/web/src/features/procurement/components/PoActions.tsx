@@ -26,7 +26,7 @@ const SUCCESS: Record<Exclude<PoCommand, 'revise'>, string> = {
   submit: 'submitted for approval',
   approve: 'approved',
   reject: 'rejected and returned to draft',
-  issue: 'issued to the supplier',
+  issue: 'issued to the vendor',
   cancel: 'cancelled',
   'short-close': 'short-closed',
   close: 'closed',
@@ -101,7 +101,7 @@ export function PoActions({ po }: { po: PurchaseOrder }) {
       )}
       {can('issue') && (
         <Button icon={Send} loading={command.isPending} onClick={() => void run('issue')}>
-          Issue to supplier
+          Issue to vendor
         </Button>
       )}
       {canReceive && (
@@ -122,7 +122,7 @@ export function PoActions({ po }: { po: PurchaseOrder }) {
         open={dialog === 'approve'}
         onClose={() => setDialog(null)}
         title={`Approve ${po.number}`}
-        message="The order moves to Approved and can then be issued to the supplier."
+        message="The order moves to Approved and can then be issued to the vendor."
         confirmLabel="Approve"
         tone="primary"
         reasonRequired={false}

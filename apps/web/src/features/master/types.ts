@@ -1,4 +1,7 @@
 /** Shapes returned by svc-master (`/v1/master`). Mirrors master.service.ts serializers. */
+import type { LaptopSpecs } from '../../components/LaptopSpecs';
+
+export type { LaptopSpecs };
 
 export type ProductStatus = 'DRAFT' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
 export type ProductType = 'GOODS' | 'SERVICE';
@@ -27,9 +30,13 @@ export interface ProductSnapshot {
   taxRate: number | null;
   status: ProductStatus;
   version: number;
+  /** The eight laptop specifications (null for legacy generic products). */
+  specs?: LaptopSpecs | null;
 }
 
 export interface Product extends ProductSnapshot {
+  isLaptop: boolean;
+  specIds: LaptopSpecIds | null;
   description: string | null;
   categoryId: string | null;
   brandId: string | null;
@@ -60,6 +67,15 @@ export interface ProductListParams {
   brandId?: string;
   isSerialized?: string;
   trackInventory?: string;
+  /** 'true' = laptop configurations only */
+  laptop?: 'true' | 'false';
+  modelId?: string;
+  generationId?: string;
+  processorId?: string;
+  ramId?: string;
+  ssdId?: string;
+  gpuId?: string;
+  screenSizeId?: string;
   limit?: number;
   cursor?: string;
 }
@@ -93,6 +109,85 @@ export interface ImportResult {
   failed: number;
   results: { row: number; sku: string; status: 'CREATED' | 'FAILED'; id?: string; error?: string; details?: unknown }[];
 }
+
+/* ---- laptop specifications and configurations ------------------------------------ */
+
+export type SpecKind = 'BRAND' | 'MODEL' | 'GENERATION' | 'PROCESSOR' | 'RAM' | 'SSD' | 'GPU' | 'SCREEN_SIZE';
+export type SpecStatus = 'ACTIVE' | 'INACTIVE';
+
+export interface SpecOption {
+  id: string;
+  kind: SpecKind;
+  name: string;
+  code: string;
+  brandId: string | null;
+  brandName: string | null;
+  sortOrder: number;
+  status: SpecStatus;
+  version: number;
+}
+
+export interface SpecOptionPayload {
+  kind: SpecKind;
+  name: string;
+  code?: string;
+  brandId?: string;
+  sortOrder?: number;
+}
+
+export interface SpecListParams {
+  kind?: SpecKind;
+  brandId?: string;
+  includeInactive?: boolean;
+}
+
+export interface LaptopSpecIds {
+  brandId: string;
+  modelId: string;
+  generationId: string;
+  processorId: string;
+  ramId: string;
+  ssdId: string;
+  gpuId: string;
+  screenSizeId: string;
+}
+export type LaptopSpecIdKey = keyof LaptopSpecIds;
+
+/** Spec kind -> id field on the configuration payload, in display order. */
+export const SPEC_ID_FIELDS: { kind: SpecKind; idKey: LaptopSpecIdKey; label: string }[] = [
+  { kind: 'BRAND', idKey: 'brandId', label: 'Brand' },
+  { kind: 'MODEL', idKey: 'modelId', label: 'Model' },
+  { kind: 'GENERATION', idKey: 'generationId', label: 'Generation' },
+  { kind: 'PROCESSOR', idKey: 'processorId', label: 'Processor' },
+  { kind: 'RAM', idKey: 'ramId', label: 'RAM' },
+  { kind: 'SSD', idKey: 'ssdId', label: 'SSD' },
+  { kind: 'GPU', idKey: 'gpuId', label: 'Graphics / GPU' },
+  { kind: 'SCREEN_SIZE', idKey: 'screenSizeId', label: 'Screen size' },
+];
+
+export interface LaptopPreview {
+  sku: string;
+  name: string;
+  specs: LaptopSpecs;
+  duplicateOf: { id: string; sku: string; name: string; status: ProductStatus } | null;
+}
+
+export interface LaptopDetailsPayload {
+  sku?: string;
+  name?: string;
+  description?: string | null;
+  serialPattern?: string | null;
+  hsnId?: string | null;
+  taxRateId?: string | null;
+  defaultWarrantyId?: string | null;
+  purchasePrice?: number | null;
+  sellingPrice?: number | null;
+  reorderLevel?: number | null;
+}
+export interface LaptopPayload extends LaptopSpecIds, LaptopDetailsPayload {
+  activate?: boolean;
+}
+export type LaptopPatch = Partial<LaptopSpecIds> & LaptopDetailsPayload;
 
 /* ---- warehouses --------------------------------------------------------------- */
 

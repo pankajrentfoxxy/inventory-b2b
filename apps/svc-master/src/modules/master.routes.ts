@@ -2,7 +2,7 @@ import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { asyncHandler, authenticate, getContext, idempotent, ifMatchVersion, parseQuery, requirePermission, requireService, requireTenant, requireUuidParams, validateBody, validateQuery, type Logger, type SqlClient, type TokenVerifier } from '@b2b/platform-kit';
 import { MasterService, actorFrom, type SimpleModel } from './master.service.js';
-import { binSchema, brandSchema, categorySchema, customFieldSchema, docTypeParam, gradeSchema, hsnSchema, importSchema, locationSchema, numberingSchema, paymentTermSchema, productListQuery, productPatchSchema, productSchema, statusChangeSchema, taxRateSchema, unitSchema, warehousePatchSchema, warehouseSchema, warrantySchema } from './master.schema.js';
+import { laptopPatchSchema, laptopSchema, laptopSpecIdsSchema, specOptionListQuery, specOptionSchema, specOptionStatusSchema, binSchema, brandSchema, categorySchema, customFieldSchema, docTypeParam, gradeSchema, hsnSchema, importSchema, locationSchema, numberingSchema, paymentTermSchema, productListQuery, productPatchSchema, productSchema, statusChangeSchema, taxRateSchema, unitSchema, warehousePatchSchema, warehouseSchema, warrantySchema } from './master.schema.js';
 
 export interface MasterRouterDeps {
   service: MasterService;
@@ -25,6 +25,8 @@ export function createMasterRouter({ service, verifier, db, logger }: MasterRout
   const idem = (scope: string) => idempotent(scope, { db, logger, required: false });
   const view = requirePermission('master.view', 'purchase.view', 'sales.view', 'inventory.view');
   const manage = requirePermission('master.manage');
+  // Simple masters (payment terms, custom fields, units, tax...) also feed the vendor / customer form.
+  const simpleView = requirePermission('master.view', 'purchase.view', 'sales.view', 'inventory.view', 'supplier.view', 'customer.view');
 
   // products
   router.get('/products', view, validateQuery(productListQuery), asyncHandler(async (req, res) => res.json(await service.listProducts(tenantOf(req), parseQuery<typeof productListQuery>(res)))));
@@ -37,6 +39,14 @@ export function createMasterRouter({ service, verifier, db, logger }: MasterRout
     router.post(`/products/:id/${command}`, manage, validateBody(statusChangeSchema), asyncHandler(async (req, res) => res.json({ data: await service.transitionProduct(tenantOf(req), actor(req), req.params.id, command, req.body.reason ?? null) })));
   }
   router.delete('/products/:id', manage, asyncHandler(async (req, res) => res.json({ data: await service.deleteProduct(tenantOf(req), actor(req), req.params.id) })));
+
+  // laptop specification masters and laptop configurations
+  router.get('/laptop-specs', view, validateQuery(specOptionListQuery), asyncHandler(async (req, res) => res.json({ data: await service.listSpecOptions(tenantOf(req), parseQuery<typeof specOptionListQuery>(res)) })));
+  router.post('/laptop-specs', manage, validateBody(specOptionSchema), asyncHandler(async (req, res) => res.status(201).json({ data: await service.createSpecOption(tenantOf(req), actor(req), req.body) })));
+  router.post('/laptop-specs/:id/status', manage, validateBody(specOptionStatusSchema), asyncHandler(async (req, res) => res.json({ data: await service.setSpecOptionStatus(tenantOf(req), actor(req), req.params.id, req.body.status) })));
+  router.post('/laptops/preview', view, validateBody(laptopSpecIdsSchema), asyncHandler(async (req, res) => res.json({ data: await service.previewLaptop(tenantOf(req), req.body) })));
+  router.post('/laptops', manage, validateBody(laptopSchema), idem('POST /master/laptops'), asyncHandler(async (req, res) => res.status(201).json({ data: await service.createLaptop(tenantOf(req), actor(req), req.body) })));
+  router.patch('/laptops/:id', manage, validateBody(laptopPatchSchema), asyncHandler(async (req, res) => res.json({ data: await service.patchLaptop(tenantOf(req), actor(req), req.params.id, req.body, ifMatchVersion(req)) })));
 
   // warehouses -> locations -> bins
   const whView = requirePermission('warehouse.view', 'master.view', 'inventory.view', 'grn.view');
@@ -63,7 +73,7 @@ export function createMasterRouter({ service, verifier, db, logger }: MasterRout
     { path: 'custom-fields', model: 'customFieldDef', schema: customFieldSchema },
   ];
   for (const s of simple) {
-    router.get(`/${s.path}`, view, validateQuery(includeInactive), asyncHandler(async (req, res) => res.json({ data: await service.simpleList(tenantOf(req), s.model, parseQuery<typeof includeInactive>(res).includeInactive === 'true') })));
+    router.get(`/${s.path}`, simpleView, validateQuery(includeInactive), asyncHandler(async (req, res) => res.json({ data: await service.simpleList(tenantOf(req), s.model, parseQuery<typeof includeInactive>(res).includeInactive === 'true') })));
     router.post(`/${s.path}`, manage, validateBody(s.schema), asyncHandler(async (req, res) => res.status(201).json({ data: await service.simpleCreate(tenantOf(req), actor(req), s.model, req.body) })));
     router.post(`/${s.path}/:id/status`, manage, validateBody(statusBody), asyncHandler(async (req, res) => res.json({ data: await service.simpleSetStatus(tenantOf(req), actor(req), s.model, req.params.id, req.body.status) })));
   }

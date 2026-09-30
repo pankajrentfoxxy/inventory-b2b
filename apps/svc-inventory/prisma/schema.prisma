@@ -27,6 +27,8 @@ model ItemRef {
   unitCode       String   @map("unit_code") @db.VarChar(10)
   status         String   @db.VarChar(10)
   version        Int
+  /// Laptop spec names from the master snapshot (null for non-laptop items)
+  specs          Json?
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([tenantId, sku])

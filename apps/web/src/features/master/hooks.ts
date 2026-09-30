@@ -1,6 +1,6 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { masterApi } from './api';
-import type { BinPayload, DocType, LocationPayload, MasterStatus, NumberingPayload, ProductListParams, ProductPatch, ProductPayload, SimpleKind, WarehousePatch, WarehousePayload, WarehouseStatus } from './types';
+import type { BinPayload, DocType, LaptopPatch, LaptopPayload, LaptopSpecIds, LocationPayload, MasterStatus, NumberingPayload, ProductListParams, ProductPatch, ProductPayload, SimpleKind, SpecListParams, SpecOptionPayload, SpecStatus, WarehousePatch, WarehousePayload, WarehouseStatus } from './types';
 
 export const masterKeys = {
   all: ['master'] as const,
@@ -12,6 +12,9 @@ export const masterKeys = {
   simple: (kind: SimpleKind, includeInactive: boolean) => ['master', 'simple', kind, includeInactive] as const,
   simpleAll: (kind: SimpleKind) => ['master', 'simple', kind] as const,
   numbering: ['master', 'numbering'] as const,
+  specs: ['master', 'laptop-specs'] as const,
+  specList: (params: SpecListParams) => ['master', 'laptop-specs', params] as const,
+  laptopPreview: (ids: LaptopSpecIds | null) => ['master', 'laptop-preview', ids] as const,
 };
 
 /* ---- products ---------------------------------------------------------------- */
@@ -70,6 +73,43 @@ export function useDeleteProduct() {
 export function useImportProducts() {
   const invalidate = useInvalidateProducts();
   return useMutation({ mutationFn: ({ rows, activate }: { rows: Omit<ProductPayload, 'activate'>[]; activate: boolean }) => masterApi.importProducts(rows, activate), onSuccess: () => invalidate() });
+}
+
+/* ---- laptop specifications and configurations ------------------------------------ */
+
+/** Spec master values (one kind, or every kind when `kind` is omitted). */
+export function useLaptopSpecs(params: SpecListParams = {}, enabled = true) {
+  return useQuery({ queryKey: masterKeys.specList(params), queryFn: () => masterApi.listSpecs(params), staleTime: 60_000, enabled, placeholderData: keepPreviousData });
+}
+
+export function useCreateSpec() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (payload: SpecOptionPayload) => masterApi.createSpec(payload), onSuccess: () => void qc.invalidateQueries({ queryKey: masterKeys.specs }) });
+}
+export function useSpecStatus() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: ({ id, status }: { id: string; status: SpecStatus }) => masterApi.setSpecStatus(id, status), onSuccess: () => void qc.invalidateQueries({ queryKey: masterKeys.specs }) });
+}
+
+/** Generated SKU / name and duplicate check for a complete set of spec ids (no write). */
+export function useLaptopPreview(ids: LaptopSpecIds | null) {
+  return useQuery({ queryKey: masterKeys.laptopPreview(ids), queryFn: () => masterApi.previewLaptop(ids!), enabled: ids !== null, retry: false, staleTime: 10_000 });
+}
+
+export function useCreateLaptop() {
+  const qc = useQueryClient();
+  const invalidate = useInvalidateProducts();
+  return useMutation({
+    mutationFn: ({ payload, idempotencyKey }: { payload: LaptopPayload; idempotencyKey: string }) => masterApi.createLaptop(payload, idempotencyKey),
+    onSuccess: () => {
+      invalidate();
+      void qc.invalidateQueries({ queryKey: ['master', 'laptop-preview'] });
+    },
+  });
+}
+export function usePatchLaptop() {
+  const invalidate = useInvalidateProducts();
+  return useMutation({ mutationFn: ({ id, patch, version }: { id: string; patch: LaptopPatch; version: number }) => masterApi.patchLaptop(id, patch, version), onSuccess: (_d, v) => invalidate(v.id) });
 }
 
 /* ---- warehouses ---------------------------------------------------------------- */

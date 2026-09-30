@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { SearchSelect, type SearchSelectOption } from '../../../components/ui';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
+import { specsSummary } from '../../../components/LaptopSpecs';
 import { useProductLookup } from '../hooks';
 import type { ProductSnapshot } from '../types';
 
@@ -14,7 +15,7 @@ export interface ProductPickerProps {
   placeholder?: string;
   /** Only products with trackInventory = true (stock documents). */
   trackInventoryOnly?: boolean;
-  /** Receives the full snapshot of the picked product (unit, tax, HSN, serialization flags). */
+  /** Receives the full snapshot of the picked product (unit, tax, HSN, serialization flags, laptop `specs`). */
   onPick?: (product: ProductSnapshot | null) => void;
   allowClear?: boolean;
   className?: string;
@@ -22,6 +23,8 @@ export interface ProductPickerProps {
 }
 
 export function productOptionLabel(p: ProductSnapshot): SearchSelectOption {
+  // Laptop configurations: SKU + the inline specs; legacy generic products keep the old summary.
+  if (p.specs) return { value: p.id, label: p.name, description: `${p.sku} - ${specsSummary(p.specs)}` };
   const bits = [p.sku, p.unitCode, p.hsnCode ? `HSN ${p.hsnCode}` : null, p.taxRate !== null ? `${p.taxRate}% GST` : null, p.isSerialized ? 'Serialized' : null].filter(Boolean);
   return { value: p.id, label: p.name, description: bits.join(' - ') };
 }

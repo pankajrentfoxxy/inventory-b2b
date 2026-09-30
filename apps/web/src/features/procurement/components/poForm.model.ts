@@ -1,5 +1,6 @@
 import { computePurchaseOrderTotals, type TotalsResult } from '@b2b/shared';
 import { todayISO } from '../../../lib/utils';
+import type { LaptopSpecs } from '../../../components/LaptopSpecs';
 import type { DiscountType, PoInput, PoLineInput, ProductSnapshot, PurchaseOrder } from '../types';
 
 /** Form state keeps numbers as strings (controlled inputs); the payload converts once. */
@@ -16,6 +17,8 @@ export interface PoLineFormValues {
   defaultTaxRate: string;
   isSerialized: boolean;
   receivedQty: number;
+  /** Laptop specs of the chosen SKU (read-only display; never sent to the API). */
+  specs: LaptopSpecs | null;
 }
 
 export interface PoFormValues {
@@ -36,11 +39,11 @@ export interface PoFormValues {
 }
 
 export function emptyLine(): PoLineFormValues {
-  return { itemId: '', itemName: '', itemSku: '', unitCode: '', orderedQty: '1', unitPrice: '', taxRate: '', defaultTaxRate: '', isSerialized: false, receivedQty: 0 };
+  return { itemId: '', itemName: '', itemSku: '', unitCode: '', orderedQty: '1', unitPrice: '', taxRate: '', defaultTaxRate: '', isSerialized: false, receivedQty: 0, specs: null };
 }
 
 export function lineFromProduct(product: ProductSnapshot, base: PoLineFormValues = emptyLine()): PoLineFormValues {
-  return { ...base, itemId: product.id, itemName: product.name, itemSku: product.sku, unitCode: product.unitCode, defaultTaxRate: product.taxRate === null ? '' : String(product.taxRate), taxRate: '', isSerialized: product.isSerialized };
+  return { ...base, itemId: product.id, itemName: product.name, itemSku: product.sku, unitCode: product.unitCode, defaultTaxRate: product.taxRate === null ? '' : String(product.taxRate), taxRate: '', isSerialized: product.isSerialized, specs: product.specs ?? null };
 }
 
 export function defaultPoForm(defaultWarehouseId = ''): PoFormValues {
@@ -76,6 +79,7 @@ export function poToForm(po: PurchaseOrder): PoFormValues {
       defaultTaxRate: l.item.taxRate === null ? '' : String(l.item.taxRate),
       isSerialized: l.item.isSerialized,
       receivedQty: l.receivedQty,
+      specs: l.item.specs ?? null,
     })),
   };
 }

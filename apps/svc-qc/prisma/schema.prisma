@@ -95,12 +95,14 @@ model QcUnitResult {
   lotId            String   @map("lot_id") @db.Uuid
   /// Serial mode: the serial; quantity mode: sample label (e.g. "sample-1")
   serialNo         String   @map("serial_no") @db.VarChar(80)
-  /// PASS | FAIL
+  /// PASS | FAIL | HOLD
   result           String   @db.VarChar(4)
   gradeCode        String?  @map("grade_code") @db.VarChar(20)
   defectCodes      String[] @default([]) @map("defect_codes")
   remarks          String?  @db.VarChar(500)
   checklistAnswers Json     @default("{}") @map("checklist_answers")
+  /// Laptop lots: spec-by-spec verification, power-on, missing parts, asset tag
+  laptopCheck      Json?    @map("laptop_check")
   inspectedBy      String   @map("inspected_by") @db.Uuid
   inspectedAt      DateTime @default(now()) @map("inspected_at") @db.Timestamptz(6)
 

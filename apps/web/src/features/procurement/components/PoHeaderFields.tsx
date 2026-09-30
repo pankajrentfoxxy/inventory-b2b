@@ -17,7 +17,7 @@ export function PoHeaderFields() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
       <div className="space-y-4">
-        <Field label="Supplier" required error={errors.supplierId?.message}>
+        <Field label="Vendor" required error={errors.supplierId?.message}>
           <Controller
             control={control}
             name="supplierId"
@@ -67,7 +67,7 @@ export function PoHeaderFields() {
         </Field>
 
         <Field label="Payment term" error={errors.paymentTermId?.message}>
-          <Select {...register('paymentTermId')} placeholder={terms.isLoading ? 'Loading...' : 'Supplier default'} options={(terms.data ?? []).map((t) => ({ value: t.id, label: `${t.name} (${t.days} days)` }))} error={Boolean(errors.paymentTermId)} />
+          <Select {...register('paymentTermId')} placeholder={terms.isLoading ? 'Loading...' : 'Vendor default'} options={(terms.data ?? []).map((t) => ({ value: t.id, label: `${t.name} (${t.days} days)` }))} error={Boolean(errors.paymentTermId)} />
         </Field>
       </div>
 
@@ -84,7 +84,7 @@ export function PoHeaderFields() {
           <Textarea rows={3} maxLength={1000} {...register('notes')} error={Boolean(errors.notes)} placeholder="Internal notes for the purchasing team" />
         </Field>
         <Field label="Terms and conditions" error={errors.terms?.message} hint="Printed on the order, up to 2000 characters">
-          <Textarea rows={3} maxLength={2000} {...register('terms')} error={Boolean(errors.terms)} placeholder="Delivery, payment and warranty terms shown to the supplier" />
+          <Textarea rows={3} maxLength={2000} {...register('terms')} error={Boolean(errors.terms)} placeholder="Delivery, payment and warranty terms shown to the vendor" />
         </Field>
       </div>
     </div>

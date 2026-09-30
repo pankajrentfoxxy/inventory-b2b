@@ -71,7 +71,7 @@ export function PurchaseOrderForm({ initial, editing }: { initial: PoFormValues;
     <FormProvider {...form}>
       <form onSubmit={handleSubmit((v) => save(v, false))} noValidate className="space-y-5">
         <Card>
-          <CardHeader title="Order details" description="Supplier, delivery warehouse and terms. GST treatment follows the supplier state and the warehouse state." />
+          <CardHeader title="Order details" description="Vendor, delivery warehouse and terms. GST treatment follows the vendor state and the warehouse state." />
           <CardBody>
             <PoHeaderFields />
           </CardBody>

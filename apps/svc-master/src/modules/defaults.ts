@@ -36,6 +36,18 @@ export const DEFAULT_GRADES = [
   { code: 'SCRAP', name: 'Scrap', sortOrder: 9, sellable: false },
 ];
 
+/**
+ * Laptop specification values seeded on activation (editable: deactivate what the tenant does not
+ * trade). Models, processors and GPUs vary per business and are added by the tenant.
+ */
+export const DEFAULT_LAPTOP_SPECS: { kind: 'BRAND' | 'GENERATION' | 'RAM' | 'SSD' | 'SCREEN_SIZE'; name: string; code: string }[] = [
+  ...['Dell', 'HP', 'Lenovo', 'Apple', 'Asus', 'Acer'].map((name) => ({ kind: 'BRAND' as const, name, code: name.toUpperCase() })),
+  ...['8th Gen', '9th Gen', '10th Gen', '11th Gen', '12th Gen', '13th Gen', '14th Gen'].map((name) => ({ kind: 'GENERATION' as const, name, code: name.split(' ')[0].toUpperCase() })),
+  ...['4 GB', '8 GB', '16 GB', '32 GB', '64 GB'].map((name) => ({ kind: 'RAM' as const, name, code: name.split(' ')[0] })),
+  ...[['128 GB', '128'], ['256 GB', '256'], ['512 GB', '512'], ['1 TB', '1TB'], ['2 TB', '2TB']].map(([name, code]) => ({ kind: 'SSD' as const, name, code })),
+  ...[['13.3"', '133'], ['14"', '14'], ['15.6"', '156'], ['16"', '16']].map(([name, code]) => ({ kind: 'SCREEN_SIZE' as const, name, code })),
+];
+
 /** Document types that number locally in their owning service (README 5.3). */
 export const DOC_TYPES = ['PO', 'GRN', 'QC', 'ADJ', 'TRF', 'SO', 'DC', 'SHP', 'RMA', 'INV', 'BILL', 'CN', 'DN', 'PAY'] as const;
 export type DocType = (typeof DOC_TYPES)[number];

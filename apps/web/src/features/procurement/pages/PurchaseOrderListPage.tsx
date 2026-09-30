@@ -59,7 +59,7 @@ export function PurchaseOrderListPage() {
         </span>
       ),
     },
-    { key: 'supplier', header: 'Supplier', render: (po) => <span className="text-slate-800">{po.supplier.displayName}</span> },
+    { key: 'supplier', header: 'Vendor', render: (po) => <span className="text-slate-800">{po.supplier.displayName}</span> },
     { key: 'orderDate', header: 'Order date', hideBelow: 'md', render: (po) => <span className="tabular">{formatDate(po.orderDate)}</span> },
     { key: 'expectedDate', header: 'Expected', hideBelow: 'lg', render: (po) => <span className="tabular text-slate-600">{formatDate(po.expectedDate)}</span> },
     { key: 'total', header: 'Total', align: 'right', render: (po) => <span className="tabular font-medium">{formatMoney(po.total, po.currency)}</span> },
@@ -68,7 +68,7 @@ export function PurchaseOrderListPage() {
   ];
 
   const chips = [
-    ...(filters.supplierId ? [{ label: `Supplier: ${supplierLabel || 'selected'}`, onClear: () => setFilters({ supplierId: '' }) }] : []),
+    ...(filters.supplierId ? [{ label: `Vendor: ${supplierLabel || 'selected'}`, onClear: () => setFilters({ supplierId: '' }) }] : []),
     ...(filters.q ? [{ label: `Search: ${filters.q}`, onClear: () => { setSearch(''); setFilters({ q: '' }); } }] : []),
   ];
 
@@ -88,7 +88,7 @@ export function PurchaseOrderListPage() {
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search number" aria-label="Search purchase orders" prefix={<Search className="w-4 h-4" />} className="h-9" />
             </div>
             <div className="w-48 sm:w-60">
-              <SupplierPicker value={filters.supplierId} selectedLabel={supplierLabel || 'Supplier'} allowClear placeholder="All suppliers" onChange={(id, s) => { setSupplierLabel(s?.displayName ?? ''); setFilters({ supplierId: id }); }} />
+              <SupplierPicker value={filters.supplierId} selectedLabel={supplierLabel || 'Vendor'} allowClear placeholder="All vendors" onChange={(id, s) => { setSupplierLabel(s?.displayName ?? ''); setFilters({ supplierId: id }); }} />
             </div>
           </>
         }
@@ -111,7 +111,7 @@ export function PurchaseOrderListPage() {
             <EmptyState
               icon={ShoppingCart}
               title={chips.length || filters.view ? 'No purchase orders match' : 'No purchase orders yet'}
-              hint={chips.length || filters.view ? 'Try another view or clear the filters.' : 'Create a purchase order to start buying from a supplier.'}
+              hint={chips.length || filters.view ? 'Try another view or clear the filters.' : 'Create a purchase order to start buying from a vendor.'}
               action={hasPermission('purchase.create') && !chips.length && !filters.view ? <Button icon={Plus} onClick={() => navigate('/purchases/orders/new')}>New purchase order</Button> : undefined}
             />
           }

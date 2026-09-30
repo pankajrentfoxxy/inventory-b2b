@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { LAPTOP_SPEC_FIELDS } from '@b2b/contracts';
 import { optionalNotes, optionalText, requiredText, uuidField } from '@b2b/shared';
 
 const code = (label: string, max: number) => requiredText(label, max, { min: 1, transform: 'upper' });
@@ -21,9 +22,23 @@ export type ChecklistInput = z.infer<typeof checklistSchema>;
 export const defectCodeSchema = z.object({ code: code('Code', 20), description: requiredText('Description', 200) });
 export const statusSchema = z.object({ status: z.enum(['ACTIVE', 'INACTIVE']) });
 
+/** Parts a received laptop may be missing (QC records them; a laptop with missing parts cannot PASS). */
+export const LAPTOP_MISSING_PARTS = ['CHARGER', 'BATTERY', 'RAM', 'SSD', 'KEYBOARD_KEYS', 'BACK_PANEL', 'SCREWS', 'OTHER'] as const;
+const specCheck = z.object({ match: z.boolean(), actual: optionalText(100, {}, 'Actual value') });
+/** Laptop inspection: every spec verified against the ordered configuration. */
+export const laptopCheckSchema = z.object({
+  specChecks: z.object(Object.fromEntries(LAPTOP_SPEC_FIELDS.map((f) => [f.key, specCheck])) as Record<(typeof LAPTOP_SPEC_FIELDS)[number]['key'], typeof specCheck>),
+  powersOn: z.boolean(),
+  missingParts: z.array(z.enum(LAPTOP_MISSING_PARTS)).max(LAPTOP_MISSING_PARTS.length).default([]),
+  assetTag: optionalText(40, { transform: 'upper' }, 'Asset tag'),
+});
+export type LaptopCheck = z.infer<typeof laptopCheckSchema>;
+
 export const unitResultSchema = z.object({
   serialNo: serialNo.optional(),
-  result: z.enum(['PASS', 'FAIL']),
+  /** HOLD keeps the unit in QC hold and blocks the lot decision until it is resolved. */
+  result: z.enum(['PASS', 'FAIL', 'HOLD']),
+  laptop: laptopCheckSchema.optional(),
   gradeCode: optionalText(20, { transform: 'upper' }, 'Grade'),
   defectCodes: z.array(code('Defect code', 20)).default([]),
   remarks: optionalNotes(500, 'Remarks'),

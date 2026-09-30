@@ -32,7 +32,7 @@ export function PartyPicker({ value, onChange, selectedLabel, disabled, error, p
   const debounced = useDebouncedValue(term, 250);
   const lookup = usePartyLookup(type, debounced, !disabled);
   const rows = lookup.data ?? [];
-  const noun = type === 'SUPPLIER' ? 'supplier' : 'customer';
+  const noun = type === 'SUPPLIER' ? 'vendor' : 'customer';
   return (
     <SearchSelect
       id={id}

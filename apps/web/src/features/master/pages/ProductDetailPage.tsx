@@ -6,15 +6,16 @@ import { Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, DescriptionLi
 import { toApiError } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 import { formatDateTime, formatMoney, formatQty, humanize } from '../../../lib/utils';
+import { LaptopSpecsView } from '../../../components/LaptopSpecs';
 import { useDeleteProduct, useProduct, useProductTransition, useSimpleMaster } from '../hooks';
 import type { ProductDetail } from '../types';
-import { ProductFormModal } from '../components/ProductFormModal';
+import { EditDetailsModal, EditSpecsModal } from '../components/LaptopEditModals';
 
 type Command = 'activate' | 'deactivate' | 'archive';
 const COMMAND_TEXT: Record<Command, { title: string; label: string; message: string; tone: 'danger' | 'primary' }> = {
-  activate: { title: 'Activate product?', label: 'Activate', message: 'The product becomes selectable on purchase orders, receipts and sales documents.', tone: 'primary' },
-  deactivate: { title: 'Deactivate product?', label: 'Deactivate', message: 'The product is hidden from pickers. Existing documents and stock are unaffected; you can activate it again later.', tone: 'danger' },
-  archive: { title: 'Archive product?', label: 'Archive', message: 'Archived products are read-only and cannot be reactivated from the UI. Use this for items you will never trade again.', tone: 'danger' },
+  activate: { title: 'Activate configuration?', label: 'Activate', message: 'The configuration becomes selectable on purchase orders, receipts and sales documents.', tone: 'primary' },
+  deactivate: { title: 'Deactivate configuration?', label: 'Deactivate', message: 'The configuration is hidden from pickers. Existing documents and stock are unaffected; you can activate it again later.', tone: 'danger' },
+  archive: { title: 'Archive configuration?', label: 'Archive', message: 'Archived configurations are read-only and cannot be reactivated from the UI. Use this for items you will never trade again.', tone: 'danger' },
 };
 
 function LockedHint({ fields }: { fields: string[] }) {
@@ -23,61 +24,81 @@ function LockedHint({ fields }: { fields: string[] }) {
     <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
       <Lock className="w-4 h-4 shrink-0 mt-0.5" />
       <span>
-        This product has stock movements. <strong>{fields.map(humanize).join(', ')}</strong> {fields.length === 1 ? 'is' : 'are'} locked and cannot be edited.
+        This configuration has stock movements. <strong>{fields.map(humanize).join(', ')}</strong> {fields.length === 1 ? 'is' : 'are'} locked and cannot be edited.
       </span>
     </div>
   );
 }
 
-function Overview({ product }: { product: ProductDetail }) {
-  const categories = useSimpleMaster('categories', true);
-  const brands = useSimpleMaster('brands', true);
+function Overview({ product, canManage, onEditSpecs, onEditDetails }: { product: ProductDetail; canManage: boolean; onEditSpecs: () => void; onEditDetails: () => void }) {
   const warranties = useSimpleMaster('warranty-policies', true);
-  const nameOf = <T extends { id: string; name: string }>(rows: T[] | undefined, id: string | null) => (id ? rows?.find((r) => r.id === id)?.name ?? '...' : null);
-  const lockTag = (field: string) => (product.lockedFields.includes(field) ? <Lock className="inline w-3 h-3 text-amber-600 ml-1" aria-label="Locked" /> : null);
+  const warranty = product.defaultWarrantyId ? warranties.data?.find((w) => w.id === product.defaultWarrantyId)?.name ?? '...' : null;
+  const editable = canManage && product.status !== 'ARCHIVED';
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
       <div className="xl:col-span-2 space-y-4">
         <Card>
-          <CardHeader title="Identity" />
+          <CardHeader
+            title="Specifications"
+            description={product.isLaptop ? 'The eight specifications that identify this configuration.' : undefined}
+            actions={
+              product.isLaptop && editable && product.status === 'DRAFT' ? (
+                <Button size="sm" variant="secondary" icon={Pencil} onClick={onEditSpecs}>
+                  Edit specifications
+                </Button>
+              ) : undefined
+            }
+          />
+          <CardBody className="space-y-3">
+            {product.specs ? (
+              <LaptopSpecsView specs={product.specs} variant="grid" />
+            ) : (
+              <p className="text-sm text-slate-500">This is a legacy generic product without laptop specifications. New items are created as laptop configurations.</p>
+            )}
+            {product.isLaptop && product.status !== 'DRAFT' && (
+              <p className="flex items-start gap-2 text-xs text-slate-500">
+                <Lock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                Specifications are fixed once active. Create a new configuration for a different variant.
+              </p>
+            )}
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader
+            title="Pricing and tax"
+            actions={
+              editable ? (
+                <Button size="sm" variant="secondary" icon={Pencil} onClick={onEditDetails}>
+                  Edit
+                </Button>
+              ) : undefined
+            }
+          />
+          <CardBody>
+            <DescriptionList
+              items={[
+                { label: 'Purchase price', value: product.purchasePrice === null ? null : formatMoney(product.purchasePrice), mono: true },
+                { label: 'Selling price', value: product.sellingPrice === null ? null : formatMoney(product.sellingPrice), mono: true },
+                { label: 'GST rate', value: product.taxRate === null ? null : `${product.taxRate}%` },
+                { label: 'HSN code', value: product.hsnCode, mono: true },
+                { label: 'Reorder level', value: product.reorderLevel === null ? null : formatQty(product.reorderLevel) },
+                { label: 'Default warranty', value: warranty },
+              ]}
+            />
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader title="Identity and tracking" />
           <CardBody>
             <DescriptionList
               items={[
                 { label: 'SKU', value: product.sku, mono: true },
                 { label: 'Name', value: product.name },
-                { label: 'Type', value: <>{product.type === 'GOODS' ? 'Goods' : 'Service'}{lockTag('type')}</> },
-                { label: 'Unit', value: <>{product.unitCode}{lockTag('unitId')}</> },
-                { label: 'Description', value: product.description, span: 2 },
-              ]}
-            />
-          </CardBody>
-        </Card>
-        <Card>
-          <CardHeader title="Inventory settings" />
-          <CardBody>
-            <DescriptionList
-              items={[
-                { label: 'Track inventory', value: <>{product.trackInventory ? 'Yes' : 'No'}{lockTag('trackInventory')}</> },
-                { label: 'Serialized', value: <>{product.isSerialized ? 'Yes' : 'No'}{lockTag('isSerialized')}</> },
-                { label: 'Requires IMEI', value: product.requiresImei ? 'Yes' : 'No' },
-                { label: 'QC required on receipt', value: product.qcRequired ? 'Yes' : 'No' },
+                { label: 'Unit', value: product.unitCode },
+                { label: 'Tracking', value: [product.trackInventory ? 'Stocked' : 'Not tracked', product.isSerialized ? 'Serialized' : null, product.qcRequired ? 'QC on receipt' : null].filter(Boolean).join(', ') },
                 { label: 'Serial pattern', value: product.serialPattern, mono: true },
-                { label: 'Reorder level', value: product.reorderLevel === null ? null : formatQty(product.reorderLevel) },
-              ]}
-            />
-          </CardBody>
-        </Card>
-        <Card>
-          <CardHeader title="Classification and tax" />
-          <CardBody>
-            <DescriptionList
-              items={[
-                { label: 'Category', value: nameOf(categories.data, product.categoryId) },
-                { label: 'Brand', value: nameOf(brands.data, product.brandId) },
-                { label: product.type === 'SERVICE' ? 'SAC code' : 'HSN code', value: product.hsnCode, mono: true },
-                { label: 'GST rate', value: product.taxRate === null ? null : `${product.taxRate}%` },
-                { label: 'Default warranty', value: nameOf(warranties.data, product.defaultWarrantyId) },
+                { label: 'Description', value: product.description, span: 2 },
               ]}
             />
           </CardBody>
@@ -85,19 +106,7 @@ function Overview({ product }: { product: ProductDetail }) {
       </div>
       <div className="space-y-4">
         <Card>
-          <CardHeader title="Pricing" />
-          <CardBody>
-            <DescriptionList
-              columns={1}
-              items={[
-                { label: 'Purchase price', value: product.purchasePrice === null ? null : formatMoney(product.purchasePrice), mono: true },
-                { label: 'Selling price', value: product.sellingPrice === null ? null : formatMoney(product.sellingPrice), mono: true },
-              ]}
-            />
-          </CardBody>
-        </Card>
-        <Card>
-          <CardHeader title="Referenced by" description="Services that hold documents for this product. Referenced products cannot be deleted, only archived." />
+          <CardHeader title="Referenced by" description="Services that hold documents for this configuration. Referenced items cannot be deleted, only archived." />
           <CardBody>
             {product.referencedBy.length === 0 ? (
               <p className="text-sm text-slate-400">Not referenced by any document yet</p>
@@ -131,6 +140,7 @@ export function ProductDetailPage() {
   const transition = useProductTransition();
   const del = useDeleteProduct();
   const [editOpen, setEditOpen] = useState(false);
+  const [specsOpen, setSpecsOpen] = useState(false);
   const [command, setCommand] = useState<Command | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -139,9 +149,9 @@ export function ProductDetailPage() {
     const err = toApiError(q.error);
     return (
       <>
-        <PageHeader title="Product" breadcrumbs={[{ label: 'Masters' }, { label: 'Products', to: '/masters/products' }]} />
+        <PageHeader title="Laptop configuration" breadcrumbs={[{ label: 'Masters' }, { label: 'Laptop configurations', to: '/masters/products' }]} />
         <Card>
-          <ErrorState title={err.status === 404 ? 'Product not found' : 'Could not load product'} message={err.status === 404 ? 'It may have been deleted, or it belongs to another organisation.' : err.message} onRetry={err.status === 404 ? undefined : () => void q.refetch()} />
+          <ErrorState title={err.status === 404 ? 'Configuration not found' : 'Could not load the configuration'} message={err.status === 404 ? 'It may have been deleted, or it belongs to another organisation.' : err.message} onRetry={err.status === 404 ? undefined : () => void q.refetch()} />
         </Card>
       </>
     );
@@ -184,20 +194,15 @@ export function ProductDetailPage() {
       <PageHeader
         title={
           <span className="inline-flex items-center gap-3">
-            {product.name}
+            <span className="font-mono">{product.sku}</span>
             <StatusBadge status={status} />
           </span>
         }
-        subtitle={<span className="font-mono">{product.sku}</span>}
-        breadcrumbs={[{ label: 'Masters' }, { label: 'Products', to: '/masters/products' }, { label: product.sku }]}
+        subtitle={product.name}
+        breadcrumbs={[{ label: 'Masters' }, { label: 'Laptop configurations', to: '/masters/products' }, { label: product.sku }]}
         actions={
           canManage ? (
             <>
-              {status !== 'ARCHIVED' && (
-                <Button variant="secondary" icon={Pencil} onClick={() => setEditOpen(true)}>
-                  Edit
-                </Button>
-              )}
               {status === 'DRAFT' || status === 'INACTIVE' ? (
                 <Button icon={Power} onClick={() => setCommand('activate')}>
                   Activate
@@ -209,15 +214,16 @@ export function ProductDetailPage() {
         }
       >
         <div className="space-y-2">
-          {status === 'ARCHIVED' && <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">This product is archived and read-only.</div>}
-          {status === 'DRAFT' && <div className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-800">Draft products are not selectable on documents until activated.</div>}
+          {status === 'ARCHIVED' && <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">This configuration is archived and read-only.</div>}
+          {status === 'DRAFT' && <div className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-800">Draft configurations are not selectable on documents until activated.</div>}
           <LockedHint fields={product.lockedFields} />
         </div>
       </PageHeader>
 
-      <Overview product={product} />
+      <Overview product={product} canManage={canManage} onEditSpecs={() => setSpecsOpen(true)} onEditDetails={() => setEditOpen(true)} />
 
-      <ProductFormModal open={editOpen} onClose={() => setEditOpen(false)} product={product} />
+      <EditDetailsModal open={editOpen} onClose={() => setEditOpen(false)} product={product} onConflict={() => void q.refetch()} />
+      {product.isLaptop && <EditSpecsModal open={specsOpen} onClose={() => setSpecsOpen(false)} product={product} onConflict={() => void q.refetch()} />}
       <ReasonDialog
         open={command !== null}
         onClose={() => setCommand(null)}
@@ -235,7 +241,7 @@ export function ProductDetailPage() {
         onClose={() => setConfirmDelete(false)}
         onConfirm={() => void runDelete()}
         loading={del.isPending}
-        title="Delete product?"
+        title="Delete configuration?"
         confirmLabel="Delete"
         message={<><strong>{product.name}</strong> will be permanently removed. Only never-used drafts can be deleted; anything referenced by a document must be archived instead.</>}
       />

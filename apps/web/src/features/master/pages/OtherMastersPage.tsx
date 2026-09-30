@@ -8,7 +8,7 @@ import type { FieldSpec } from '../components/SimpleFormModal';
 const PAYMENT_TERM_FIELDS: FieldSpec[] = [
   { name: 'name', label: 'Name', type: 'text', sanitize: 'singleLine', maxLength: 60, required: true, hint: 'e.g. Net 30' },
   { name: 'days', label: 'Days', type: 'number', integer: true, min: 0, required: true, hint: '0 = due on receipt' },
-  { name: 'isDefault', label: 'Default term', type: 'checkbox', description: 'Pre-selected on new suppliers and customers', span: 2 },
+  { name: 'isDefault', label: 'Default term', type: 'checkbox', description: 'Pre-selected on new vendors and customers', span: 2 },
 ];
 const GRADE_FIELDS: FieldSpec[] = [
   { name: 'code', label: 'Code', type: 'text', sanitize: 'upper', maxLength: 10, required: true, mono: true, hint: 'e.g. NEW, A+, B, SCRAP' },
@@ -40,7 +40,7 @@ export function OtherMastersPage() {
           kind="payment-terms"
           title="Payment terms"
           noun="Payment term"
-          description="Credit periods offered to customers and agreed with suppliers."
+          description="Credit periods offered to customers and agreed with vendors."
           columns={[
             { key: 'name', header: 'Name', render: (p: PaymentTerm) => <span className="inline-flex items-center gap-2 font-medium text-slate-900">{p.name}{p.isDefault && <Badge tone="amber"><Star className="w-3 h-3" /> Default</Badge>}</span> },
             { key: 'days', header: 'Days', align: 'right', width: '80px', render: (p: PaymentTerm) => <span className="tabular">{p.days}</span> },

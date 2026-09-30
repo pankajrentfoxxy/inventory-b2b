@@ -3,11 +3,37 @@
  * write emits an audit event and, for replicated entities (products, warehouses, bins, grades), a
  * domain event carrying the full snapshot + version so consumers never call back.
  */
-import { EVENT_TYPES, type ProductSnapshot, type WarehouseSnapshot } from '@b2b/contracts';
+import { EVENT_TYPES, LAPTOP_SPEC_FIELDS, type LaptopSpecKind, type LaptopSpecs, type ProductSnapshot, type WarehouseSnapshot } from '@b2b/contracts';
 import { HttpError, businessRuleError, conflict, decodeCursor, encodeCursor, enqueueEvent, forbidden, inWarehouseScope, notFound, setTenantContext, uuidv7, type TenantContext } from '@b2b/platform-kit';
 import type { Prisma, PrismaClient, Tx } from '../db.js';
-import { DEFAULT_GRADES, DEFAULT_NUMBERING, DEFAULT_PAYMENT_TERMS, DEFAULT_TAX_RATES, DEFAULT_UNITS, DOC_TYPES, type DocType } from './defaults.js';
-import type { ProductInput } from './master.schema.js';
+import { DEFAULT_GRADES, DEFAULT_LAPTOP_SPECS, DEFAULT_NUMBERING, DEFAULT_PAYMENT_TERMS, DEFAULT_TAX_RATES, DEFAULT_UNITS, DOC_TYPES, type DocType } from './defaults.js';
+import type { LaptopInput, LaptopPatch, LaptopSpecIds, ProductInput, SpecOptionInput } from './master.schema.js';
+
+/** Product columns holding the eight laptop spec ids, keyed like LaptopSpecIds. */
+const SPEC_COLUMNS: Record<keyof LaptopSpecIds, { kind: LaptopSpecKind; column: string; key: keyof LaptopSpecs }> = {
+  brandId: { kind: 'BRAND', column: 'brandSpecId', key: 'brand' },
+  modelId: { kind: 'MODEL', column: 'modelSpecId', key: 'model' },
+  generationId: { kind: 'GENERATION', column: 'generationSpecId', key: 'generation' },
+  processorId: { kind: 'PROCESSOR', column: 'processorSpecId', key: 'processor' },
+  ramId: { kind: 'RAM', column: 'ramSpecId', key: 'ram' },
+  ssdId: { kind: 'SSD', column: 'ssdSpecId', key: 'ssd' },
+  gpuId: { kind: 'GPU', column: 'gpuSpecId', key: 'gpu' },
+  screenSizeId: { kind: 'SCREEN_SIZE', column: 'screenSizeSpecId', key: 'screenSize' },
+};
+const SPEC_ID_KEYS = Object.keys(SPEC_COLUMNS) as (keyof LaptopSpecIds)[];
+
+/** Letters and digits only, upper case; RAM / SSD drop a trailing GB so "16 GB" becomes 16. */
+export function deriveSpecCode(kind: LaptopSpecKind, name: string): string {
+  let code = name.toUpperCase().split('').filter((c) => (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')).join('');
+  if ((kind === 'RAM' || kind === 'SSD') && code.endsWith('GB') && code.length > 2) code = code.slice(0, -2);
+  return (code || 'X').slice(0, 20);
+}
+
+interface LaptopColumns {
+  brandSpecId: string; modelSpecId: string; generationSpecId: string; processorSpecId: string; ramSpecId: string; ssdSpecId: string; gpuSpecId: string; screenSizeSpecId: string;
+  specs: LaptopSpecs;
+  configKey: string;
+}
 
 export const PRODUCER = 'svc-master';
 
@@ -75,6 +101,7 @@ export class MasterService {
       const exists = await tx.conditionGrade.findFirst({ where: { tenantId, code: g.code } });
       if (!exists) await tx.conditionGrade.create({ data: { id: uuidv7(), tenantId, ...g } });
     }
+    await this.seedLaptopSpecs(tx, tenantId);
     for (const docType of DOC_TYPES) {
       await tx.numberingConfig.upsert({ where: { tenantId_docType: { tenantId, docType } }, update: {}, create: { tenantId, docType, ...DEFAULT_NUMBERING[docType] } });
     }
@@ -89,14 +116,27 @@ export class MasterService {
     await this.emitGrades(tx, tenantId, { userId: null, name: 'system', correlationId: input.correlationId });
   }
 
+  /** Idempotent: adds the default laptop spec values a tenant does not have yet. */
+  async seedLaptopSpecs(tx: Tx, tenantId: string): Promise<number> {
+    let added = 0;
+    for (const [i, s] of DEFAULT_LAPTOP_SPECS.entries()) {
+      const exists = await tx.laptopSpecOption.findFirst({ where: { tenantId, kind: s.kind, name: { equals: s.name, mode: 'insensitive' } } });
+      if (exists) continue;
+      await tx.laptopSpecOption.create({ data: { id: uuidv7(), tenantId, kind: s.kind, name: s.name, code: s.code, sortOrder: i } });
+      added += 1;
+    }
+    return added;
+  }
+
   /* ---- products ------------------------------------------------------------ */
 
   snapshot(p: ProductRow): ProductSnapshot {
-    return { id: p.id, tenantId: p.tenantId, sku: p.sku, name: p.name, type: p.type as 'GOODS' | 'SERVICE', trackInventory: p.trackInventory, isSerialized: p.isSerialized, requiresImei: p.requiresImei, serialPattern: p.serialPattern, qcRequired: p.qcRequired, unitCode: p.unit.code, hsnCode: p.hsn?.code ?? null, taxRate: p.taxRate ? Number(p.taxRate.gstRate) : null, status: p.status, version: p.version };
+    return { id: p.id, tenantId: p.tenantId, sku: p.sku, name: p.name, type: p.type as 'GOODS' | 'SERVICE', trackInventory: p.trackInventory, isSerialized: p.isSerialized, requiresImei: p.requiresImei, serialPattern: p.serialPattern, qcRequired: p.qcRequired, unitCode: p.unit.code, hsnCode: p.hsn?.code ?? null, taxRate: p.taxRate ? Number(p.taxRate.gstRate) : null, status: p.status, version: p.version, specs: (p.specs as LaptopSpecs | null) ?? null };
   }
 
   serializeProduct(p: ProductRow) {
-    return { ...this.snapshot(p), description: p.description, categoryId: p.categoryId, brandId: p.brandId, unitId: p.unitId, hsnId: p.hsnId, taxRateId: p.taxRateId, defaultWarrantyId: p.defaultWarrantyId, purchasePrice: p.purchasePrice === null ? null : Number(p.purchasePrice), sellingPrice: p.sellingPrice === null ? null : Number(p.sellingPrice), reorderLevel: p.reorderLevel === null ? null : Number(p.reorderLevel), attributes: p.attributes, customFields: p.customFields, createdAt: p.createdAt, updatedAt: p.updatedAt };
+    const specIds = p.configKey ? { brandId: p.brandSpecId, modelId: p.modelSpecId, generationId: p.generationSpecId, processorId: p.processorSpecId, ramId: p.ramSpecId, ssdId: p.ssdSpecId, gpuId: p.gpuSpecId, screenSizeId: p.screenSizeSpecId } : null;
+    return { ...this.snapshot(p), isLaptop: Boolean(p.configKey), specIds, description: p.description, categoryId: p.categoryId, brandId: p.brandId, unitId: p.unitId, hsnId: p.hsnId, taxRateId: p.taxRateId, defaultWarrantyId: p.defaultWarrantyId, purchasePrice: p.purchasePrice === null ? null : Number(p.purchasePrice), sellingPrice: p.sellingPrice === null ? null : Number(p.sellingPrice), reorderLevel: p.reorderLevel === null ? null : Number(p.reorderLevel), attributes: p.attributes, customFields: p.customFields, createdAt: p.createdAt, updatedAt: p.updatedAt };
   }
 
   private validateProductRules(p: { type: string; trackInventory: boolean; isSerialized: boolean; requiresImei: boolean }) {
@@ -135,7 +175,7 @@ export class MasterService {
     return this.tx(tenantId, (tx) => this.createProductIn(tx, tenantId, actor, input));
   }
 
-  private async createProductIn(tx: Tx, tenantId: string, actor: Actor, input: ProductInput) {
+  private async createProductIn(tx: Tx, tenantId: string, actor: Actor, input: ProductInput, laptop?: LaptopColumns) {
     const trackInventory = input.trackInventory ?? input.type === 'GOODS';
     const rules = { type: input.type, trackInventory, isSerialized: input.isSerialized, requiresImei: input.requiresImei };
     this.validateProductRules(rules);
@@ -150,6 +190,7 @@ export class MasterService {
           serialPattern: input.serialPattern ?? null, qcRequired: input.qcRequired ?? (trackInventory ? true : false), categoryId: input.categoryId ?? null, brandId: input.brandId ?? null, unitId: input.unitId, hsnId: input.hsnId ?? null,
           taxRateId: input.taxRateId ?? null, defaultWarrantyId: input.defaultWarrantyId ?? null, purchasePrice: input.purchasePrice ?? null, sellingPrice: input.sellingPrice ?? null, reorderLevel: input.reorderLevel ?? null,
           attributes: input.attributes as Prisma.InputJsonValue, customFields: input.customFields as Prisma.InputJsonValue, status: input.activate ? 'ACTIVE' : 'DRAFT',
+          ...(laptop ? { ...laptop, specs: laptop.specs as unknown as Prisma.InputJsonValue } : {}),
         },
       });
     } catch (err) {
@@ -157,7 +198,7 @@ export class MasterService {
       throw err;
     }
     const p = await this.emitProduct(tx, tenantId, EVENT_TYPES.MASTER_PRODUCT_CREATED, id, actor);
-    await this.audit(tx, tenantId, actor, { action: 'PRODUCT_CREATED', entityType: 'PRODUCT', entityId: id, summary: `${p.sku} ${p.name}`, newValue: { sku: p.sku, status: p.status }, version: 0 });
+    await this.audit(tx, tenantId, actor, { action: laptop ? 'LAPTOP_CONFIGURATION_CREATED' : 'PRODUCT_CREATED', entityType: 'PRODUCT', entityId: id, summary: `${p.sku} ${p.name}`, newValue: { sku: p.sku, status: p.status, ...(laptop ? { specs: laptop.specs } : {}) }, version: 0 });
     return this.serializeProduct(p);
   }
 
@@ -253,15 +294,20 @@ export class MasterService {
     return { ...this.serializeProduct(p), referencedBy: refs.map((r) => r.referencedBy), lockedFields: (await this.movements.hasMovements(tenantId, id)) ? [...MasterService.LOCKED_AFTER_MOVEMENTS] : [] };
   }
 
-  async listProducts(tenantId: string, q: { q?: string; status?: string; type?: string; categoryId?: string; brandId?: string; isSerialized?: string; trackInventory?: string; limit: number; cursor?: string }) {
+  async listProducts(tenantId: string, q: { q?: string; status?: string; type?: string; categoryId?: string; brandId?: string; isSerialized?: string; trackInventory?: string; laptop?: string; limit: number; cursor?: string } & Partial<LaptopSpecIds>) {
     const cursor = decodeCursor(q.cursor);
     const where: Prisma.ProductWhereInput = { tenantId };
     if (q.status) where.status = q.status;
     if (q.type) where.type = q.type;
     if (q.categoryId) where.categoryId = q.categoryId;
-    if (q.brandId) where.brandId = q.brandId;
+    if (q.brandId && q.laptop !== 'true') where.brandId = q.brandId;
     if (q.isSerialized) where.isSerialized = q.isSerialized === 'true';
     if (q.trackInventory) where.trackInventory = q.trackInventory === 'true';
+    if (q.laptop) where.configKey = q.laptop === 'true' ? { not: null } : null;
+    for (const k of SPEC_ID_KEYS) {
+      const v = (q as Record<string, unknown>)[k];
+      if (typeof v === 'string') (where as Record<string, unknown>)[SPEC_COLUMNS[k].column] = v;
+    }
     if (q.q) where.OR = [{ name: { contains: q.q, mode: 'insensitive' } }, { sku: { contains: q.q, mode: 'insensitive' } }];
     if (cursor && typeof cursor[0] === 'string' && typeof cursor[1] === 'string') where.AND = [{ OR: [{ name: { gt: cursor[0] } }, { name: cursor[0], id: { gt: cursor[1] } }] }];
     const rows = await this.tx(tenantId, (tx) => tx.product.findMany({ where, include: productInclude, orderBy: [{ name: 'asc' }, { id: 'asc' }], take: q.limit + 1 }));
@@ -281,6 +327,182 @@ export class MasterService {
   async productsBatch(tenantId: string, ids: string[]): Promise<ProductSnapshot[]> {
     const rows = await this.tx(tenantId, (tx) => tx.product.findMany({ where: { tenantId, id: { in: ids } }, include: productInclude }));
     return rows.map((p) => this.snapshot(p));
+  }
+
+  /* ---- laptop specification masters ------------------------------------------ */
+
+  specOptionView(o: { id: string; kind: string; name: string; code: string; brandId: string | null; sortOrder: number; status: string; version: number; brand?: { name: string } | null }) {
+    return { id: o.id, kind: o.kind, name: o.name, code: o.code, brandId: o.brandId, brandName: o.brand?.name ?? null, sortOrder: o.sortOrder, status: o.status, version: o.version };
+  }
+
+  async listSpecOptions(tenantId: string, q: { kind?: string; brandId?: string; includeInactive?: string }) {
+    const rows = await this.tx(tenantId, (tx) => tx.laptopSpecOption.findMany({
+      where: { tenantId, ...(q.kind ? { kind: q.kind } : {}), ...(q.brandId ? { brandId: q.brandId } : {}), ...(q.includeInactive === 'true' ? {} : { status: 'ACTIVE' }) },
+      include: { brand: { select: { name: true } } },
+      orderBy: [{ kind: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+    }));
+    return rows.map((o) => this.specOptionView(o));
+  }
+
+  async createSpecOption(tenantId: string, actor: Actor, input: SpecOptionInput) {
+    return this.tx(tenantId, async (tx) => {
+      let brandName: string | null = null;
+      if (input.kind === 'MODEL') {
+        if (!input.brandId) throw businessRuleError('VALIDATION_FAILED', 'A model belongs to a brand', [{ path: 'brandId', message: 'Select the brand' }]);
+        const brand = await tx.laptopSpecOption.findFirst({ where: { id: input.brandId, tenantId, kind: 'BRAND' } });
+        if (!brand) throw businessRuleError('VALIDATION_FAILED', 'Brand not found', [{ path: 'brandId', message: 'Select a valid brand' }]);
+        if (brand.status !== 'ACTIVE') throw businessRuleError('VALIDATION_FAILED', 'Brand is inactive', [{ path: 'brandId', message: 'This brand is inactive' }]);
+        brandName = brand.name;
+      } else if (input.brandId) {
+        throw businessRuleError('VALIDATION_FAILED', 'Only models belong to a brand', [{ path: 'brandId', message: 'Not allowed for this specification' }]);
+      }
+      const id = uuidv7();
+      try {
+        await tx.laptopSpecOption.create({ data: { id, tenantId, kind: input.kind, name: input.name, code: input.code ?? deriveSpecCode(input.kind, input.name), brandId: input.kind === 'MODEL' ? input.brandId! : null, sortOrder: input.sortOrder } });
+      } catch (err) {
+        if (isUniqueViolation(err)) throw businessRuleError('MASTER_DUPLICATE', `${input.name} already exists${brandName ? ` for ${brandName}` : ''}`, [{ path: 'name', message: 'This value already exists' }]);
+        throw err;
+      }
+      const row = await tx.laptopSpecOption.findUniqueOrThrow({ where: { id }, include: { brand: { select: { name: true } } } });
+      await this.audit(tx, tenantId, actor, { action: 'LAPTOP_SPEC_CREATED', entityType: 'LAPTOP_SPEC', entityId: id, summary: `${input.kind} ${row.name}`, newValue: this.specOptionView(row), version: 0 });
+      return this.specOptionView(row);
+    });
+  }
+
+  async setSpecOptionStatus(tenantId: string, actor: Actor, id: string, status: 'ACTIVE' | 'INACTIVE') {
+    return this.tx(tenantId, async (tx) => {
+      const current = await tx.laptopSpecOption.findFirst({ where: { id, tenantId } });
+      if (!current) throw notFound('Specification not found');
+      if (current.status === status) return this.specOptionView(current);
+      if (status === 'ACTIVE' && current.brandId) {
+        const brand = await tx.laptopSpecOption.findFirst({ where: { id: current.brandId, tenantId } });
+        if (brand?.status !== 'ACTIVE') throw businessRuleError('VALIDATION_FAILED', 'Activate the brand first', [{ path: 'brandId', message: 'The brand is inactive' }]);
+      }
+      const row = await tx.laptopSpecOption.update({ where: { id }, data: { status, version: { increment: 1 } }, include: { brand: { select: { name: true } } } });
+      await this.audit(tx, tenantId, actor, { action: `LAPTOP_SPEC_${status}`, entityType: 'LAPTOP_SPEC', entityId: id, summary: `${row.kind} ${row.name}`, oldValue: { status: current.status }, newValue: { status }, version: row.version });
+      return this.specOptionView(row);
+    });
+  }
+
+  /* ---- laptop configurations ------------------------------------------------- */
+
+  /** Resolves and checks the eight spec ids; returns the columns to store and the SKU parts. */
+  private async resolveLaptopSpecs(tx: Tx, tenantId: string, ids: LaptopSpecIds) {
+    const rows = await tx.laptopSpecOption.findMany({ where: { tenantId, id: { in: SPEC_ID_KEYS.map((k) => ids[k]) } } });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const problems: { path: string; message: string }[] = [];
+    const picked = {} as Record<keyof LaptopSpecIds, (typeof rows)[number]>;
+    for (const k of SPEC_ID_KEYS) {
+      const { kind } = SPEC_COLUMNS[k];
+      const label = LAPTOP_SPEC_FIELDS.find((f) => f.kind === kind)!.label;
+      const row = byId.get(ids[k]);
+      if (!row || row.kind !== kind) problems.push({ path: k, message: `Select a valid ${label.toLowerCase()}` });
+      else if (row.status !== 'ACTIVE') problems.push({ path: k, message: `${row.name} is inactive` });
+      else picked[k] = row;
+    }
+    if (picked.modelId && picked.brandId && picked.modelId.brandId !== picked.brandId.id) problems.push({ path: 'modelId', message: `${picked.modelId.name} is not a ${picked.brandId.name} model` });
+    if (problems.length) throw businessRuleError('VALIDATION_FAILED', 'Please fix the highlighted specifications', problems);
+    const specs = Object.fromEntries(SPEC_ID_KEYS.map((k) => [SPEC_COLUMNS[k].key, picked[k].name])) as unknown as LaptopSpecs;
+    const columns: LaptopColumns = {
+      brandSpecId: ids.brandId, modelSpecId: ids.modelId, generationSpecId: ids.generationId, processorSpecId: ids.processorId,
+      ramSpecId: ids.ramId, ssdSpecId: ids.ssdId, gpuSpecId: ids.gpuId, screenSizeSpecId: ids.screenSizeId,
+      specs,
+      configKey: SPEC_ID_KEYS.map((k) => ids[k]).join('|'),
+    };
+    const skuBase = [picked.brandId.code, picked.modelId.code, picked.processorId.code, picked.ramId.code, picked.ssdId.code].join('-').slice(0, 36);
+    return { columns, skuBase, defaultName: `${picked.brandId.name} ${picked.modelId.name}` };
+  }
+
+  private async duplicateConfiguration(tx: Tx, tenantId: string, configKey: string, exceptId?: string) {
+    return tx.product.findFirst({ where: { tenantId, configKey, ...(exceptId ? { id: { not: exceptId } } : {}) }, select: { id: true, sku: true, name: true, status: true } });
+  }
+
+  /** First free SKU: base, then base-2, base-3 ... (SKUs are unique ignoring case). */
+  private async freeSku(tx: Tx, tenantId: string, base: string, exceptId?: string): Promise<string> {
+    for (let n = 1; n < 100; n += 1) {
+      const candidate = n === 1 ? base : `${base}-${n}`;
+      const taken = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "products" WHERE "tenant_id" = ${tenantId}::uuid AND lower("sku") = lower(${candidate}) AND (${exceptId ?? null}::uuid IS NULL OR "id" <> ${exceptId ?? null}::uuid)`;
+      if (!taken.length) return candidate;
+    }
+    throw businessRuleError('MASTER_DUPLICATE_SKU', 'Could not generate a free SKU; enter one manually', [{ path: 'sku', message: 'Enter a SKU' }]);
+  }
+
+  /** What the configuration would be called, and whether it already exists (no writes). */
+  async previewLaptop(tenantId: string, ids: LaptopSpecIds) {
+    return this.tx(tenantId, async (tx) => {
+      const r = await this.resolveLaptopSpecs(tx, tenantId, ids);
+      const duplicateOf = await this.duplicateConfiguration(tx, tenantId, r.columns.configKey);
+      return { sku: duplicateOf ? duplicateOf.sku : await this.freeSku(tx, tenantId, r.skuBase), name: r.defaultName, specs: r.columns.specs, duplicateOf };
+    });
+  }
+
+  private async laptopTaxDefaults(tx: Tx, tenantId: string) {
+    const unit = (await tx.unit.findFirst({ where: { tenantId, code: 'NOS', status: 'ACTIVE' } })) ?? (await tx.unit.findFirst({ where: { tenantId, code: 'PCS', status: 'ACTIVE' } })) ?? (await tx.unit.findFirst({ where: { tenantId, status: 'ACTIVE' } }));
+    if (!unit) throw businessRuleError('VALIDATION_FAILED', 'Create a unit of measure first', [{ path: 'unitId', message: 'No active unit' }]);
+    const tax = await tx.taxRate.findFirst({ where: { tenantId, gstRate: 18, status: 'ACTIVE' } });
+    return { unitId: unit.id, taxRateId: tax?.id ?? null };
+  }
+
+  async createLaptop(tenantId: string, actor: Actor, input: LaptopInput) {
+    return this.tx(tenantId, async (tx) => {
+      const r = await this.resolveLaptopSpecs(tx, tenantId, input);
+      const dup = await this.duplicateConfiguration(tx, tenantId, r.columns.configKey);
+      if (dup) throw businessRuleError('MASTER_DUPLICATE_CONFIGURATION', `This configuration already exists as ${dup.sku}`, [{ path: 'modelId', message: `Same specifications as ${dup.sku} (${dup.name})` }]);
+      const defaults = await this.laptopTaxDefaults(tx, tenantId);
+      const sku = input.sku ?? (await this.freeSku(tx, tenantId, r.skuBase));
+      const product: ProductInput = {
+        sku, name: input.name ?? r.defaultName, description: input.description ?? null, type: 'GOODS', trackInventory: true, isSerialized: true, requiresImei: false,
+        serialPattern: input.serialPattern ?? null, qcRequired: true, categoryId: null, brandId: null, unitId: defaults.unitId, hsnId: input.hsnId ?? null,
+        taxRateId: input.taxRateId === undefined ? defaults.taxRateId : input.taxRateId, defaultWarrantyId: input.defaultWarrantyId ?? null,
+        purchasePrice: input.purchasePrice ?? null, sellingPrice: input.sellingPrice ?? null, reorderLevel: input.reorderLevel ?? null, attributes: {}, customFields: {}, activate: input.activate,
+      };
+      try {
+        return await this.createProductIn(tx, tenantId, actor, product, r.columns);
+      } catch (err) {
+        if (isUniqueViolation(err)) throw businessRuleError('MASTER_DUPLICATE_CONFIGURATION', 'This configuration already exists', [{ path: 'modelId', message: 'Same specifications as an existing configuration' }]);
+        throw err;
+      }
+    });
+  }
+
+  /**
+   * Specifications define what the SKU is, so they can change only while the configuration is a
+   * DRAFT; afterwards create a new configuration. Prices, tax, HSN, warranty and name stay editable.
+   */
+  async patchLaptop(tenantId: string, actor: Actor, id: string, patch: LaptopPatch, expectedVersion: number | null) {
+    const specPatch = SPEC_ID_KEYS.filter((k) => patch[k] !== undefined);
+    const rest: Partial<ProductInput> = {};
+    for (const k of ['sku', 'name', 'description', 'serialPattern', 'hsnId', 'taxRateId', 'defaultWarrantyId', 'purchasePrice', 'sellingPrice', 'reorderLevel'] as const) {
+      if (patch[k] !== undefined) (rest as Record<string, unknown>)[k] = patch[k];
+    }
+    if (specPatch.length) {
+      await this.tx(tenantId, async (tx) => {
+        const current = await tx.product.findFirst({ where: { id, tenantId } });
+        if (!current || !current.configKey) throw notFound('Laptop configuration not found');
+        if (expectedVersion !== null && expectedVersion !== current.version) throw conflict('The configuration was modified by someone else', 'VERSION_CONFLICT');
+        const currentIds = { brandId: current.brandSpecId!, modelId: current.modelSpecId!, generationId: current.generationSpecId!, processorId: current.processorSpecId!, ramId: current.ramSpecId!, ssdId: current.ssdSpecId!, gpuId: current.gpuSpecId!, screenSizeId: current.screenSizeSpecId! };
+        const next = { ...currentIds, ...Object.fromEntries(specPatch.map((k) => [k, patch[k]])) } as LaptopSpecIds;
+        const changed = SPEC_ID_KEYS.filter((k) => next[k] !== currentIds[k]);
+        if (!changed.length) return;
+        if (current.status !== 'DRAFT') throw businessRuleError('MASTER_FIELD_LOCKED', 'Specifications are fixed once the configuration is active; create a new configuration instead', changed.map((k) => ({ path: k, message: 'Locked after activation' })));
+        const r = await this.resolveLaptopSpecs(tx, tenantId, next);
+        const dup = await this.duplicateConfiguration(tx, tenantId, r.columns.configKey, id);
+        if (dup) throw businessRuleError('MASTER_DUPLICATE_CONFIGURATION', `This configuration already exists as ${dup.sku}`, [{ path: changed[0], message: `Same specifications as ${dup.sku}` }]);
+        // A draft's SKU and default name are derived from its specs, so they follow the new specs
+        // (drafts cannot be on documents yet). An explicit sku / name in the same patch wins.
+        const oldSpecs = current.specs as LaptopSpecs | null;
+        const derived: { sku?: string; name?: string } = {};
+        if (patch.sku === undefined) derived.sku = await this.freeSku(tx, tenantId, r.skuBase, id);
+        if (patch.name === undefined && oldSpecs && current.name === `${oldSpecs.brand} ${oldSpecs.model}`) derived.name = r.defaultName;
+        const done = await tx.product.updateMany({ where: { id, version: current.version }, data: { ...r.columns, ...derived, specs: r.columns.specs as unknown as Prisma.InputJsonValue, version: current.version + 1 } });
+        if (done.count !== 1) throw conflict('The configuration was modified by someone else', 'VERSION_CONFLICT');
+        const p = await this.emitProduct(tx, tenantId, EVENT_TYPES.MASTER_PRODUCT_UPDATED, id, actor);
+        await this.audit(tx, tenantId, actor, { action: 'LAPTOP_SPECS_UPDATED', entityType: 'PRODUCT', entityId: id, summary: `Specifications of ${p.sku}`, oldValue: current.specs, newValue: r.columns.specs, version: p.version });
+        expectedVersion = p.version;
+      });
+    }
+    if (Object.keys(rest).length) return this.patchProduct(tenantId, actor, id, rest, expectedVersion);
+    return this.getProduct(tenantId, id);
   }
 
   /* ---- warehouses ------------------------------------------------------------ */

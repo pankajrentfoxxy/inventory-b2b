@@ -4,6 +4,7 @@ import type { PartyEnv } from './config.js';
 import { createPrisma, type PrismaClient } from './db.js';
 import { createInternalPartyRouter, createPartyRouter, registerPartyConsumers } from './modules/party.routes.js';
 import { PartyService } from './modules/party.service.js';
+import { PartyFormService } from './modules/party.form.js';
 
 export interface PartyRuntime {
   app: Express;
@@ -20,9 +21,11 @@ export async function createPartyRuntime(config: PartyEnv, overrides: WiringOver
   const wiring = wireService('svc-party', config, overrides);
   const prisma = overrides.prisma ?? createPrisma(config.DATABASE_URL, !wiring.isTest);
   const kit = asKitClient(prisma);
-  const service = new PartyService(prisma, createSecretBox(config.APP_ENCRYPTION_KEY));
+  const box = createSecretBox(config.APP_ENCRYPTION_KEY);
+  const service = new PartyService(prisma, box);
+  const forms = new PartyFormService(service, box);
   const relay = createOutboxRelay({ client: kit, publisher: wiring.publisher, logger: wiring.logger, pollMs: config.OUTBOX_POLL_MS });
-  const deps = { service, verifier: wiring.verifier, db: kit, logger: wiring.logger };
+  const deps = { service, forms, verifier: wiring.verifier, db: kit, logger: wiring.logger };
   const app = createServiceApp({
     service: 'svc-party',
     logger: wiring.logger,

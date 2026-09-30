@@ -4,6 +4,7 @@ import { Badge, Button, Card, CardBody, CardHeader, DetailSkeleton, EmptyState, 
 import { toApiError } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 import { formatMoney, formatQty, humanize } from '../../../lib/utils';
+import { LaptopSpecsView } from '../../../components/LaptopSpecs';
 import { useStockByItem, useWarehouseMaps } from '../hooks';
 import { WAREHOUSE_BUCKETS, type Bucket, type StockByItem } from '../types';
 
@@ -65,11 +66,11 @@ export function StockItemPage() {
       <PageHeader
         title={
           <span className="flex items-center gap-2 flex-wrap">
-            {item.name}
+            <span className="font-mono">{item.sku}</span>
             {item.isSerialized && <Badge tone="purple">Serialized</Badge>}
           </span>
         }
-        subtitle={<span className="font-mono">{item.sku}</span>}
+        subtitle={item.name}
         breadcrumbs={crumbs}
         actions={
           <>
@@ -87,6 +88,15 @@ export function StockItemPage() {
         <Stat label="Rejected" value={formatQty(sumBucket(data, 'REJECTED'))} tone="red" />
         <Stat label="In transit" value={formatQty(sumBucket(data, 'IN_TRANSIT'))} />
       </StatGrid>
+
+      {item.specs && (
+        <Card className="mb-5">
+          <CardHeader title="Laptop configuration" description="The eight specifications of this SKU." />
+          <CardBody>
+            <LaptopSpecsView specs={item.specs} variant="grid" />
+          </CardBody>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Card className="overflow-hidden lg:col-span-2">

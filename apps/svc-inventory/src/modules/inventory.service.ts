@@ -59,7 +59,7 @@ export class InventoryService {
   async upsertItemRef(tx: Tx, s: ProductSnapshot): Promise<void> {
     const existing = await tx.itemRef.findUnique({ where: { id: s.id } });
     if (existing && existing.version > s.version) return;
-    const data = { tenantId: s.tenantId, sku: s.sku, name: s.name, trackInventory: s.trackInventory, isSerialized: s.isSerialized, requiresImei: s.requiresImei, serialPattern: s.serialPattern, qcRequired: s.qcRequired, unitCode: s.unitCode, status: s.status, version: s.version };
+    const data = { tenantId: s.tenantId, sku: s.sku, name: s.name, trackInventory: s.trackInventory, isSerialized: s.isSerialized, requiresImei: s.requiresImei, serialPattern: s.serialPattern, qcRequired: s.qcRequired, unitCode: s.unitCode, status: s.status, version: s.version, specs: s.specs ? (s.specs as Prisma.InputJsonValue) : Prisma.DbNull };
     await tx.itemRef.upsert({ where: { id: s.id }, update: data, create: { id: s.id, ...data } });
   }
 
@@ -350,7 +350,7 @@ export class InventoryService {
     return this.tx(tenantId, async (tx) => {
       const search = q.q ? `%${q.q}%` : null;
       const rows = await tx.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
-        SELECT b.item_id AS "itemId", b.warehouse_id AS "warehouseId", i.sku, i.name, i.is_serialized AS "isSerialized", i.unit_code AS "unitCode", w.code AS "warehouseCode", w.name AS "warehouseName",
+        SELECT b.item_id AS "itemId", b.warehouse_id AS "warehouseId", i.sku, i.name, i.specs, i.is_serialized AS "isSerialized", i.unit_code AS "unitCode", w.code AS "warehouseCode", w.name AS "warehouseName",
           coalesce(sum(b.qty) FILTER (WHERE b.bucket = 'QC_HOLD'), 0)::float8 AS "qcHold",
           coalesce(sum(b.qty) FILTER (WHERE b.bucket = 'AVAILABLE'), 0)::float8 AS "available",
           coalesce(sum(b.qty) FILTER (WHERE b.bucket = 'RESERVED'), 0)::float8 AS "reserved",
@@ -365,9 +365,9 @@ export class InventoryService {
         WHERE b.tenant_id = ${tenantId}::uuid
           ${q.warehouseId ? Prisma.sql`AND b.warehouse_id = ${q.warehouseId}::uuid` : Prisma.empty}
           ${q.itemId ? Prisma.sql`AND b.item_id = ${q.itemId}::uuid` : Prisma.empty}
-          ${search ? Prisma.sql`AND (i.sku ILIKE ${search} OR i.name ILIKE ${search})` : Prisma.empty}
+          ${search ? Prisma.sql`AND (i.sku ILIKE ${search} OR i.name ILIKE ${search} OR i.specs::text ILIKE ${search})` : Prisma.empty}
           ${this.scopeSql(ctx, Prisma.sql`b.warehouse_id`)}
-        GROUP BY b.item_id, b.warehouse_id, i.sku, i.name, i.is_serialized, i.unit_code, w.code, w.name, c.avg_cost
+        GROUP BY b.item_id, b.warehouse_id, i.sku, i.name, i.specs, i.is_serialized, i.unit_code, w.code, w.name, c.avg_cost
         HAVING sum(b.qty) <> 0 ${q.bucket ? Prisma.sql`AND coalesce(sum(b.qty) FILTER (WHERE b.bucket = ${q.bucket}), 0) > 0` : Prisma.empty}
         ORDER BY i.sku, w.code
         LIMIT ${q.limit}`);
@@ -399,7 +399,7 @@ export class InventoryService {
         : [];
       const customers = await tx.$queryRaw<Record<string, unknown>[]>(Prisma.sql`SELECT party_id AS "partyId", qty::float8 AS qty FROM customer_stock_balances WHERE tenant_id = ${tenantId}::uuid AND item_id = ${itemId}::uuid AND qty <> 0`);
       const cost = await tx.itemCost.findMany({ where: { tenantId, itemId } });
-      return { item: { id: item.id, sku: item.sku, name: item.name, isSerialized: item.isSerialized, unitCode: item.unitCode }, byWarehouse, byBin, byGrade, delivered: customers, cost: cost.map((c) => ({ warehouseId: c.warehouseId, avgCost: Number(c.avgCost), qtyBasis: Number(c.qtyBasis) })) };
+      return { item: { id: item.id, sku: item.sku, name: item.name, isSerialized: item.isSerialized, unitCode: item.unitCode, specs: item.specs ?? null }, byWarehouse, byBin, byGrade, delivered: customers, cost: cost.map((c) => ({ warehouseId: c.warehouseId, avgCost: Number(c.avgCost), qtyBasis: Number(c.qtyBasis) })) };
     });
   }
 
@@ -455,7 +455,7 @@ export class InventoryService {
       const u = await tx.serialUnit.findUnique({ where: { id } });
       if (!u || (u.warehouseId && !inWarehouseScope(ctx, u.warehouseId))) throw notFound('Serial number not found');
       const item = await tx.itemRef.findUnique({ where: { id: u.itemId } });
-      return { ...this.serialView(u), item: item ? { sku: item.sku, name: item.name } : null };
+      return { ...this.serialView(u), item: item ? { sku: item.sku, name: item.name, specs: item.specs ?? null } : null };
     });
   }
 

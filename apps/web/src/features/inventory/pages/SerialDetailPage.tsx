@@ -4,6 +4,7 @@ import { Card, CardBody, CardHeader, DescriptionList, DetailSkeleton, EmptyState
 import { toApiError } from '../../../lib/api';
 import { formatDate, formatDateTime, formatMoney, humanize } from '../../../lib/utils';
 import { RefLink } from '../components/RefLink';
+import { SerialTraceability } from '../components/SerialTraceability';
 import { useSerial, useSerialHistory, useWarehouseMaps } from '../hooks';
 
 function IdLink({ id, to, label }: { id: string | null; to: (id: string) => string; label: string }) {
@@ -59,6 +60,9 @@ export function SerialDetailPage() {
         breadcrumbs={crumbs}
         actions={<StatusBadge status={u.bucket} />}
       />
+      <div className="mb-5">
+        <SerialTraceability unit={u} history={history.data} />
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <Card className="lg:col-span-1">
           <CardHeader title="Unit" />
@@ -66,7 +70,7 @@ export function SerialDetailPage() {
             <DescriptionList
               columns={1}
               items={[
-                { label: 'Item', value: u.item ? <Link to={`/inventory/stock/${u.itemId}`} className="text-brand-700 hover:underline">{u.item.sku} - {u.item.name}</Link> : u.itemId },
+                { label: u.item?.specs ? 'Laptop' : 'Item', value: u.item ? <Link to={`/inventory/stock/${u.itemId}`} className="text-brand-700 hover:underline">{u.item.sku} - {u.item.name}</Link> : u.itemId },
                 { label: 'IMEI', value: u.imei, mono: true },
                 { label: 'Bucket', value: <StatusBadge status={u.bucket} /> },
                 { label: 'Warehouse', value: u.warehouseId ? maps.warehouseLabel(u.warehouseId) : null },

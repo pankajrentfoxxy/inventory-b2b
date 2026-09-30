@@ -4,6 +4,7 @@ import { ClipboardCheck, History, PackageCheck } from 'lucide-react';
 import { Badge, Button, Card, CardBody, CardHeader, DataTable, DescriptionList, DetailSkeleton, EmptyState, ErrorState, PageHeader, Skeleton, StatusBadge, Tabs, type Column } from '../../../components/ui';
 import { toApiError } from '../../../lib/api';
 import { formatDate, formatDateTime, formatMoney, formatQty } from '../../../lib/utils';
+import { LineSpecs } from '../components/LineSpecs';
 import { PoActions } from '../components/PoActions';
 import { PoTotals } from '../components/PoTotals';
 import { ProgressBar } from '../components/ProgressBar';
@@ -25,15 +26,17 @@ function Overview({ po }: { po: PurchaseOrderDetail }) {
     { key: 'n', header: '#', width: '40px', render: (l) => <span className="text-slate-500 tabular">{l.lineNo}</span> },
     {
       key: 'item',
-      header: 'Product',
+      header: 'Laptop (SKU)',
       render: (l) => (
-        <div>
-          <p className="font-medium text-slate-900">{l.item.name}</p>
-          <p className="text-xs text-slate-500 font-mono">
-            {l.item.sku}
-            {l.item.hsnCode ? ` - HSN ${l.item.hsnCode}` : ''}
-            {l.item.isSerialized ? ' - serialized' : ''}
-          </p>
+        <div className="min-w-[220px] max-w-[440px]">
+          <p className="font-mono text-[13px] font-semibold text-slate-900">{l.item.sku}</p>
+          <p className="text-sm text-slate-700">{l.item.name}</p>
+          {l.item.hsnCode || l.item.isSerialized ? (
+            <p className="text-[11px] text-slate-500">
+              {[l.item.hsnCode ? `HSN ${l.item.hsnCode}` : null, l.item.isSerialized ? 'serialized' : null].filter(Boolean).join(' - ')}
+            </p>
+          ) : null}
+          <LineSpecs specs={l.item.specs} className="mt-1" />
         </div>
       ),
     },
@@ -52,7 +55,7 @@ function Overview({ po }: { po: PurchaseOrderDetail }) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card>
-          <CardHeader title="Supplier" description="Snapshot taken when the order was created" />
+          <CardHeader title="Vendor" description="Snapshot taken when the order was created" />
           <CardBody>
             <p className="text-sm font-semibold text-slate-900">{po.supplier.displayName}</p>
             {po.supplier.legalName !== po.supplier.displayName && <p className="text-xs text-slate-500">{po.supplier.legalName}</p>}
@@ -96,7 +99,7 @@ function Overview({ po }: { po: PurchaseOrderDetail }) {
       </div>
 
       <Card className="overflow-hidden">
-        <CardHeader title="Lines" description={`${po.lines.length} line${po.lines.length === 1 ? '' : 's'}`} />
+        <CardHeader title="Laptops ordered" description={`${po.lines.length} line${po.lines.length === 1 ? '' : 's'} - expand a line to see all specifications`} />
         <DataTable columns={columns} rows={po.lines} rowKey={(l) => l.id} empty={<EmptyState title="No lines" />} dense />
       </Card>
 

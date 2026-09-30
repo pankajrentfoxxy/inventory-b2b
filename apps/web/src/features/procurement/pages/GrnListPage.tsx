@@ -6,6 +6,7 @@ import { useUrlFilters } from '../../../hooks/useUrlFilters';
 import { toApiError } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 import { formatDate, formatQty } from '../../../lib/utils';
+import { LaptopSpecsView } from '../../../components/LaptopSpecs';
 import { WarehouseSelect } from '../components/pickers';
 import { useGrns, usePurchaseOrder } from '../hooks';
 import type { Grn, GrnListParams } from '../types';
@@ -39,11 +40,29 @@ export function GrnListPage() {
       header: 'Purchase order',
       render: (g) => (
         <Link to={`/purchases/orders/${g.poId}`} onClick={(e) => e.stopPropagation()} className="text-brand-700 hover:underline font-mono text-[13px]">
-          {g.poNumber ?? (po.data && po.data.id === g.poId ? po.data.number : 'Open PO')}
+          {g.poNumber ?? (po.data && po.data.id === g.poId ? po.data.number : g.poId.slice(0, 8))}
         </Link>
       ),
     },
-    { key: 'supplier', header: 'Supplier', hideBelow: 'md', render: (g) => g.supplier.displayName },
+    {
+      key: 'laptops',
+      header: 'Laptops',
+      hideBelow: 'md',
+      render: (g) => {
+        const first = g.lines[0];
+        if (!first) return <span className="text-slate-300">-</span>;
+        return (
+          <div className="min-w-0 max-w-[280px]">
+            <p className="text-[13px]">
+              <span className="font-mono font-medium text-slate-900">{first.item.sku}</span>
+              {g.lines.length > 1 && <span className="text-xs text-slate-500"> +{g.lines.length - 1} more</span>}
+            </p>
+            <LaptopSpecsView specs={first.item.specs} variant="inline" />
+          </div>
+        );
+      },
+    },
+    { key: 'supplier', header: 'Vendor', hideBelow: 'md', render: (g) => g.supplier.displayName },
     { key: 'warehouse', header: 'Warehouse', hideBelow: 'md', render: (g) => `${g.warehouse.code} - ${g.warehouse.name}` },
     { key: 'date', header: 'Received', render: (g) => <span className="tabular">{formatDate(g.receivedDate)}</span> },
     { key: 'lines', header: 'Lines', align: 'right', hideBelow: 'lg', render: (g) => <span className="tabular">{g.lines.length}</span> },

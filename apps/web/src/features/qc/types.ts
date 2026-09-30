@@ -1,9 +1,12 @@
+import type { LaptopSpecs } from '../../components/LaptopSpecs';
+
 /** Response shapes of svc-qc (`view()` in qc.service.ts) and the masters the QC screens need. */
 
 export const QC_LOT_STATUSES = ['OPEN', 'IN_INSPECTION', 'DECIDED', 'CLOSED', 'CANCELLED'] as const;
 export type QcLotStatus = (typeof QC_LOT_STATUSES)[number];
 export type QcMode = 'SERIAL' | 'QUANTITY';
-export type QcResultValue = 'PASS' | 'FAIL';
+/** HOLD is valid for laptop lots only: the unit stays in QC hold and blocks the lot decision. */
+export type QcResultValue = 'PASS' | 'FAIL' | 'HOLD';
 export type QcSourceType = 'GRN' | 'CUSTOMER_RETURN' | 'TRANSFER_IN' | 'RTO';
 export type ChecklistItemKind = 'PASS_FAIL' | 'NUMERIC' | 'TEXT' | 'PHOTO';
 
@@ -17,6 +20,27 @@ export interface QcItemSnapshot {
   qcRequired: boolean;
   unitCode: string;
   status: string;
+  /** Laptop configurations only. */
+  specs?: LaptopSpecs | null;
+}
+
+/* ---- laptop inspection ------------------------------------------------------------------------ */
+
+export const LAPTOP_MISSING_PARTS = ['CHARGER', 'BATTERY', 'RAM', 'SSD', 'KEYBOARD_KEYS', 'BACK_PANEL', 'SCREWS', 'OTHER'] as const;
+export type LaptopMissingPart = (typeof LAPTOP_MISSING_PARTS)[number];
+/** Defect codes the server adds on its own when a laptop FAILs for one of these reasons. */
+export const LAPTOP_SYSTEM_DEFECTS = ['SPEC_MISMATCH', 'NO_POWER', 'MISSING_PARTS'] as const;
+export type LaptopSpecKey = keyof LaptopSpecs;
+
+export interface LaptopSpecCheck {
+  match: boolean;
+  actual?: string | null;
+}
+export interface LaptopCheck {
+  specChecks: Record<LaptopSpecKey, LaptopSpecCheck>;
+  powersOn: boolean;
+  missingParts: LaptopMissingPart[];
+  assetTag?: string | null;
 }
 
 export interface QcUnitResult {
@@ -27,6 +51,7 @@ export interface QcUnitResult {
   defectCodes: string[];
   remarks: string | null;
   checklistAnswers: Record<string, unknown>;
+  laptopCheck?: LaptopCheck | null;
   inspectedBy: string;
   inspectedAt: string;
 }
@@ -81,7 +106,12 @@ export interface QcLot {
   updatedAt: string;
   version: number;
   results: QcUnitResult[];
-  progress: { inspected: number; total: number } | null;
+  /** Serial mode only. */
+  progress: { inspected: number; total: number; passed: number; failed: number; onHold: number } | null;
+  /** The item is a laptop configuration: per-unit laptop checks are required. */
+  isLaptop: boolean;
+  /** The configuration the laptops were ordered with (item snapshot specs). */
+  expectedSpecs: LaptopSpecs | null;
 }
 export interface QcLotDetail extends QcLot {
   checklist: QcChecklist | null;
@@ -105,6 +135,8 @@ export interface UnitResultInput {
   defectCodes: string[];
   remarks?: string | null;
   checklistAnswers: Record<string, unknown>;
+  /** Required for laptop lots. */
+  laptop?: LaptopCheck;
 }
 export interface DecideInput {
   passQty?: number;

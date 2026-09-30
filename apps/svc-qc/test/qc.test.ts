@@ -139,7 +139,7 @@ describe('inspection and decisions', () => {
     const partial = await api(inspector).put(`/api/v1/qc/lots/${phoneLot}/results`, { results: [{ serialNo: 'sn1', result: 'PASS', gradeCode: 'A' }, { serialNo: 'SN2', result: 'FAIL', defectCodes: ['DEAD'] }] });
     assert.equal(partial.status, 200, JSON.stringify(partial.body));
     assert.equal(partial.body.data.status, 'IN_INSPECTION');
-    assert.deepEqual(partial.body.data.progress, { inspected: 2, total: 3 });
+    assert.deepEqual(partial.body.data.progress, { inspected: 2, total: 3, passed: 1, failed: 1, onHold: 0 });
     const incomplete = await api(approver).post(`/api/v1/qc/lots/${phoneLot}/decide`, {});
     assert.equal(incomplete.status, 422);
     assert.equal(incomplete.body.error.code, 'QC_RESULTS_INCOMPLETE');

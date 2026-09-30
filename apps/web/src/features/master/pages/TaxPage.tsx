@@ -2,16 +2,9 @@ import { useMemo } from 'react';
 import { Badge, PageHeader } from '../../../components/ui';
 import { formatDate, todayISO } from '../../../lib/utils';
 import { useSimpleMaster } from '../hooks';
-import { GST_SLABS, type HsnCode, type TaxRate, type Unit } from '../types';
+import { GST_SLABS, type HsnCode, type TaxRate } from '../types';
 import { SimpleMasterCard } from '../components/SimpleMasterCard';
 import type { FieldSpec } from '../components/SimpleFormModal';
-
-const UNIT_FIELDS: FieldSpec[] = [
-  { name: 'code', label: 'Code', type: 'text', sanitize: 'code', maxLength: 10, required: true, mono: true, hint: 'e.g. PCS, KG, MTR' },
-  { name: 'name', label: 'Name', type: 'text', sanitize: 'singleLine', maxLength: 50, required: true },
-  { name: 'decimals', label: 'Decimals', type: 'number', integer: true, min: 0, max: 3, defaultValue: '0', hint: 'Quantity precision (0-3)' },
-  { name: 'uqc', label: 'UQC', type: 'text', sanitize: 'upper', maxLength: 10, mono: true, hint: 'GST unit quantity code for returns, e.g. PCS, KGS, OTH' },
-];
 
 const TAX_FIELDS: FieldSpec[] = [
   { name: 'name', label: 'Name', type: 'text', sanitize: 'singleLine', maxLength: 50, required: true, span: 2 },
@@ -36,27 +29,14 @@ export function TaxPage() {
 
   return (
     <>
-      <PageHeader title="Tax, Units & HSN" breadcrumbs={[{ label: 'Masters' }, { label: 'Tax, Units & HSN' }]} subtitle="Verify the GST slabs with your CA before go-live." />
+      <PageHeader title="Tax & HSN" breadcrumbs={[{ label: 'Masters' }, { label: 'Tax & HSN' }]} subtitle="Verify the GST slabs with your CA before go-live." />
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-        <SimpleMasterCard<'units'>
-          kind="units"
-          title="Units"
-          noun="Unit"
-          description="Units of measure with quantity precision."
-          columns={[
-            { key: 'code', header: 'Code', width: '90px', render: (u: Unit) => <span className="font-mono text-[13px]">{u.code}</span> },
-            { key: 'name', header: 'Name', render: (u: Unit) => <span className="font-medium text-slate-900">{u.name}</span> },
-            { key: 'decimals', header: 'Decimals', align: 'right', width: '90px', render: (u: Unit) => <span className="tabular">{u.decimals}</span> },
-            { key: 'uqc', header: 'UQC', hideBelow: 'md', width: '80px', render: (u: Unit) => <span className="font-mono text-[13px]">{u.uqc ?? <span className="text-slate-300">-</span>}</span> },
-          ]}
-          fields={UNIT_FIELDS}
-          rowLabel={(u) => `${u.code} ${u.name}`}
-        />
         <SimpleMasterCard<'tax-rates'>
           kind="tax-rates"
           title="Tax rates"
           noun="Tax rate"
-          description="GST slabs (plus cess) applied on product lines."
+          description="GST slabs (plus cess) applied on laptop lines."
+          className="xl:col-span-2"
           columns={[
             { key: 'name', header: 'Name', render: (t: TaxRate) => <span className="font-medium text-slate-900">{t.name}</span> },
             { key: 'gstRate', header: 'GST', align: 'right', width: '80px', render: (t: TaxRate) => <span className="tabular">{Number(t.gstRate)}%</span> },

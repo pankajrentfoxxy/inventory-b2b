@@ -1,3 +1,5 @@
+import type { LaptopSpecs } from '../../components/LaptopSpecs';
+
 /**
  * Response shapes of svc-inventory (`/api/v1/inventory`) and the master lookups the module needs.
  * Mirrors apps/svc-inventory/src/modules/inventory.service.ts; do not invent fields here.
@@ -29,6 +31,8 @@ export interface StockRow {
   warehouseId: string;
   sku: string;
   name: string;
+  /** Laptop configurations only. */
+  specs?: LaptopSpecs | null;
   isSerialized: boolean;
   unitCode: string;
   warehouseCode: string;
@@ -54,6 +58,7 @@ export interface StockItemSummary {
   id: string;
   sku: string;
   name: string;
+  specs?: LaptopSpecs | null;
   isSerialized: boolean;
   unitCode: string;
 }
@@ -165,7 +170,7 @@ export interface SerialUnit {
   updatedAt: string;
 }
 export interface SerialDetail extends SerialUnit {
-  item: { sku: string; name: string } | null;
+  item: { sku: string; name: string; specs?: LaptopSpecs | null } | null;
 }
 export interface SerialEvent {
   id: string;

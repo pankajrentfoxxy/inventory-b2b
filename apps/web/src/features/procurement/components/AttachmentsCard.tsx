@@ -36,7 +36,7 @@ export function AttachmentsCard({ entityType, entityId, uploadPermission }: { en
     <Card>
       <CardHeader
         title="Attachments"
-        description="Supplier invoices, delivery notes, photos (max 25 MB each)."
+        description="Vendor invoices, delivery notes, photos (max 25 MB each)."
         actions={
           canUpload ? (
             <>
@@ -58,7 +58,7 @@ export function AttachmentsCard({ entityType, entityId, uploadPermission }: { en
         ) : list.isError ? (
           <ErrorState message={toApiError(list.error).message} onRetry={() => void list.refetch()} />
         ) : (list.data ?? []).length === 0 ? (
-          <EmptyState icon={Paperclip} title="No attachments" hint={canUpload ? 'Upload the supplier invoice or delivery note.' : undefined} />
+          <EmptyState icon={Paperclip} title="No attachments" hint={canUpload ? 'Upload the vendor invoice or delivery note.' : undefined} />
         ) : (
           <ul className="divide-y divide-slate-100">
             {list.data!.map((a) => (

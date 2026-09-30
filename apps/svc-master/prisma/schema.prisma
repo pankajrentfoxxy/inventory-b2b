@@ -146,6 +146,19 @@ model Product {
   reorderLevel      Decimal?  @map("reorder_level") @db.Decimal(18, 3)
   attributes        Json      @default("{}")
   customFields      Json      @default("{}") @map("custom_fields")
+  /// Laptop configuration: the eight spec options (all set or all null; FKs and CHECK in the migration)
+  brandSpecId       String?   @map("brand_spec_id") @db.Uuid
+  modelSpecId       String?   @map("model_spec_id") @db.Uuid
+  generationSpecId  String?   @map("generation_spec_id") @db.Uuid
+  processorSpecId   String?   @map("processor_spec_id") @db.Uuid
+  ramSpecId         String?   @map("ram_spec_id") @db.Uuid
+  ssdSpecId         String?   @map("ssd_spec_id") @db.Uuid
+  gpuSpecId         String?   @map("gpu_spec_id") @db.Uuid
+  screenSizeSpecId  String?   @map("screen_size_spec_id") @db.Uuid
+  /// Spec names copied at save time ({ brand, model, generation, processor, ram, ssd, gpu, screenSize })
+  specs             Json?
+  /// The eight spec ids joined; unique per tenant (no duplicate configurations)
+  configKey         String?   @map("config_key")
   /// DRAFT | ACTIVE | INACTIVE | ARCHIVED
   status            String    @db.VarChar(10)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -163,6 +176,30 @@ model Product {
   @@index([tenantId, status])
   @@index([tenantId, name])
   @@map("products")
+}
+
+/// Laptop specification masters (Brand, Model, Generation, Processor, RAM, SSD, GPU, Screen size).
+model LaptopSpecOption {
+  id        String   @id @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  /// BRAND | MODEL | GENERATION | PROCESSOR | RAM | SSD | GPU | SCREEN_SIZE
+  kind      String   @db.VarChar(20)
+  name      String   @db.VarChar(100)
+  /// Short token used in generated SKUs
+  code      String   @db.VarChar(20)
+  /// MODEL rows only: the brand the model belongs to
+  brandId   String?  @map("brand_id") @db.Uuid
+  sortOrder Int      @default(0) @map("sort_order")
+  status    String   @default("ACTIVE") @db.VarChar(10)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  version   Int      @default(0)
+
+  brand  LaptopSpecOption?  @relation("ModelBrand", fields: [brandId], references: [id])
+  models LaptopSpecOption[] @relation("ModelBrand")
+
+  @@index([tenantId, kind, status])
+  @@map("laptop_spec_options")
 }
 
 model Warehouse {

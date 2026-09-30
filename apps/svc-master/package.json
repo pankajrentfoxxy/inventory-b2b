@@ -13,7 +13,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
-    "migrate:legacy": "tsx scripts/migrate-legacy.ts"
+    "migrate:legacy": "tsx scripts/migrate-legacy.ts",
+    "seed:laptop-specs": "tsx scripts/seed-laptop-specs.ts"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"

@@ -6,6 +6,7 @@ import { useUrlFilters } from '../../../hooks/useUrlFilters';
 import { toApiError } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
 import { cn, formatDateTime, formatQty, humanize } from '../../../lib/utils';
+import { LaptopSpecsView } from '../../../components/LaptopSpecs';
 import { WarehouseSelect } from '../../procurement/components/pickers';
 import { useScopedWarehouses } from '../../procurement/hooks';
 import { useQcLots } from '../hooks';
@@ -42,7 +43,7 @@ export function QcLotListPage() {
     { key: 'number', header: 'Lot', render: (l) => <span className="font-mono text-[13px] font-medium text-slate-900">{l.number}</span> },
     {
       key: 'source',
-      header: 'Source',
+      header: 'Source GRN',
       render: (l) => {
         const to = sourceLink(l);
         const label = l.sourceNumber ?? humanize(l.sourceType);
@@ -57,11 +58,12 @@ export function QcLotListPage() {
     },
     {
       key: 'item',
-      header: 'Item',
+      header: 'Laptop (SKU)',
       render: (l) => (
-        <div>
-          <p className="text-slate-900">{l.item.name}</p>
-          <p className="text-xs text-slate-500 font-mono">{l.item.sku}</p>
+        <div className="min-w-0 max-w-[340px]">
+          <p className="font-mono text-[13px] font-medium text-slate-900">{l.item.sku}</p>
+          <p className="text-xs text-slate-700 truncate">{l.item.name}</p>
+          <LaptopSpecsView specs={l.expectedSpecs ?? l.item.specs} variant="inline" />
         </div>
       ),
     },
@@ -78,8 +80,16 @@ export function QcLotListPage() {
             <span className="text-emerald-700">{formatQty(l.passQty)} pass</span> / <span className={l.failQty > 0 ? 'text-red-700' : 'text-slate-500'}>{formatQty(l.failQty)} fail</span>
           </span>
         ) : l.progress ? (
-          <span className={cn('text-xs tabular', l.progress.inspected === l.progress.total ? 'text-emerald-700' : 'text-slate-700')}>
-            {l.progress.inspected}/{l.progress.total} inspected
+          <span className="text-xs tabular block">
+            <span className={cn(l.progress.inspected === l.progress.total ? 'text-emerald-700' : 'text-slate-700')}>
+              {l.progress.inspected}/{l.progress.total} inspected
+            </span>
+            {l.progress.inspected > 0 && (
+              <span className="block">
+                <span className="text-emerald-700">{l.progress.passed ?? 0} passed</span> / <span className={(l.progress.failed ?? 0) > 0 ? 'text-red-700' : 'text-slate-500'}>{l.progress.failed ?? 0} failed</span> / <span className={(l.progress.onHold ?? 0) > 0 ? 'text-amber-700' : 'text-slate-500'}>{l.progress.onHold ?? 0} on hold</span>
+                <span className="text-slate-500"> of {l.progress.total}</span>
+              </span>
+            )}
           </span>
         ) : (
           <span className="text-xs text-slate-400">-</span>
@@ -125,7 +135,7 @@ export function QcLotListPage() {
           rowKey={(l) => l.id}
           loading={query.isLoading}
           error={query.isError ? <ErrorState message={toApiError(query.error).message} onRetry={() => void query.refetch()} /> : undefined}
-          empty={<EmptyState icon={ClipboardCheck} title={filters.status === 'OPEN' && !chips.length ? 'No open lots' : 'No lots match'} hint={filters.status === 'OPEN' && !chips.length ? 'Lots are created automatically when a goods receipt is posted to inventory.' : 'Try another view or clear the filters.'} />}
+          empty={<EmptyState icon={ClipboardCheck} title={filters.status === 'OPEN' && !chips.length ? 'No laptops waiting for QC' : 'No lots match'} hint={filters.status === 'OPEN' && !chips.length ? 'A QC lot is created automatically for every laptop line when a goods receipt is posted.' : 'Try another view or clear the filters.'} />}
           onRowClick={(l) => navigate(`/qc/lots/${l.id}`)}
         />
       </Card>
