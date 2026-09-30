@@ -8,7 +8,7 @@ import type { RequestContext } from '../../middleware/auth.js';
 import { findLivePoOrThrow } from './purchaseOrder.repository.js';
 import { recordPoActivity } from './purchaseOrder.audit.js';
 
-type Ctx = Pick<RequestContext, 'userId' | 'userName' | 'organizationId'>;
+type Ctx = Pick<RequestContext, 'userId' | 'userName' | 'organizationId' | 'correlationId'>;
 export const MAX_PO_DOCUMENTS = 10;
 
 function safeName(name: string) {

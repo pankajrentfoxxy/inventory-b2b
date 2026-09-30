@@ -1,6 +1,6 @@
-import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import type { ZodTypeAny, z } from 'zod';
-import { validationError, type ErrorDetail } from './errors.js';
+import type { NextFunction, Request, RequestHandler, Response, Router } from 'express';
+import { z, type ZodTypeAny } from 'zod';
+import { notFound, validationError, type ErrorDetail } from './errors.js';
 
 type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<unknown>;
 
@@ -63,4 +63,18 @@ export function validateParams<T extends ZodTypeAny>(schema: T): RequestHandler 
 
 export function parseParams<T extends ZodTypeAny>(res: Response): z.output<T> {
   return res.locals.params as z.output<T>;
+}
+
+const uuidSchema = z.string().uuid();
+
+/**
+ * Route params named here must be UUIDs. Anything else answers 404: nothing can exist under a
+ * malformed id, and a 404 reveals nothing (phase-plan/README.md 5.2 / 5.12).
+ */
+export function requireUuidParams(router: Router, ...names: string[]) {
+  for (const name of names) {
+    router.param(name, (_req, _res, next, value: string) => {
+      next(uuidSchema.safeParse(value).success ? undefined : notFound());
+    });
+  }
 }

@@ -1,60 +1,60 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { AppLayout } from './layout/AppLayout';
-import { ProtectedRoute } from './router/ProtectedRoute';
-import { LoginPage } from './features/auth/LoginPage';
-import { RegisterPage } from './features/auth/RegisterPage';
-import { VendorListPage } from './features/vendors/pages/VendorListPage';
-import { VendorCreatePage } from './features/vendors/pages/VendorCreatePage';
-import { VendorDetailPage } from './features/vendors/pages/VendorDetailPage';
-import { VendorEditPage } from './features/vendors/pages/VendorEditPage';
-import { ItemListPage } from './features/items/pages/ItemListPage';
-import { PurchaseOrderListPage } from './features/purchase-orders/pages/PurchaseOrderListPage';
-import { PurchaseOrderCreatePage } from './features/purchase-orders/pages/PurchaseOrderCreatePage';
-import { PurchaseOrderDetailPage } from './features/purchase-orders/pages/PurchaseOrderDetailPage';
-import { PurchaseOrderEditPage } from './features/purchase-orders/pages/PurchaseOrderEditPage';
-import { PurchaseReceiveListPage } from './features/purchase-receives/pages/PurchaseReceiveListPage';
-import { PurchaseReceiveCreatePage } from './features/purchase-receives/pages/PurchaseReceiveCreatePage';
-import { PurchaseReceiveDetailPage } from './features/purchase-receives/pages/PurchaseReceiveDetailPage';
-import { VendorFieldsSettingsPage } from './features/settings/VendorFieldsSettingsPage';
-import { PurchaseSettingsPage } from './features/settings/PurchaseSettingsPage';
-import { EmptyState } from './components/ui';
 import { Compass } from 'lucide-react';
+import { AppLayout } from './layout/AppLayout';
+import { ProtectedRoute, type Area } from './router/ProtectedRoute';
+import type { RouteDef } from './router/types';
+import { EmptyState } from './components/ui';
+import { LoginPage } from './features/auth/LoginPage';
+import { AcceptInvitationPage, ForgotPasswordPage, ResetPasswordPage } from './features/auth/PasswordPages';
+import { ApplyPage } from './features/auth/ApplyPage';
+import { HomePage } from './features/home/HomePage';
+import { iamRoutes } from './features/iam/routes';
+import { platformRoutes } from './features/platform/routes';
+import { masterRoutes } from './features/master/routes';
+import { partiesRoutes } from './features/parties/routes';
+import { inventoryRoutes } from './features/inventory/routes';
+import { procurementRoutes } from './features/procurement/routes';
+import { qcRoutes } from './features/qc/routes';
+import { legacyRoutes } from './features/legacy.routes';
 
-function Shell({ children, permission }: { children: React.ReactNode; permission?: Parameters<typeof ProtectedRoute>[0]['permission'] }) {
+function Shell({ children, permission, area = 'tenant' }: { children: React.ReactNode; permission?: string | readonly string[]; area?: Area }) {
   return (
-    <ProtectedRoute permission={permission}>
-      <AppLayout>{children}</AppLayout>
+    <ProtectedRoute permission={permission} area={area}>
+      <AppLayout variant={area}>{children}</AppLayout>
     </ProtectedRoute>
   );
 }
+
+const tenantRoutes: RouteDef[] = [...masterRoutes, ...partiesRoutes, ...inventoryRoutes, ...procurementRoutes, ...qcRoutes, ...iamRoutes, ...legacyRoutes];
 
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/" element={<Navigate to="/purchases/purchase-orders" replace />} />
-      <Route path="/purchases" element={<Navigate to="/purchases/purchase-orders" replace />} />
+      <Route path="/admin/login" element={<LoginPage portal="admin" />} />
+      <Route path="/register" element={<Navigate to="/apply" replace />} />
+      <Route path="/apply" element={<ApplyPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      {/* svc-notification links: owner invites (tenant activation) -> /accept-invite, member invites (IAM) -> /accept-invitation */}
+      <Route path="/accept-invite" element={<AcceptInvitationPage defaultKind="owner" />} />
+      <Route path="/accept-invitation" element={<AcceptInvitationPage defaultKind="member" />} />
 
-      <Route path="/items" element={<Shell permission="item.view"><ItemListPage /></Shell>} />
+      <Route path="/" element={<Shell><HomePage /></Shell>} />
+      <Route path="/purchases" element={<Navigate to="/purchases/orders" replace />} />
+      <Route path="/settings" element={<Navigate to="/settings/members" replace />} />
+      <Route path="/masters" element={<Navigate to="/masters/products" replace />} />
+      <Route path="/parties" element={<Navigate to="/parties/suppliers" replace />} />
+      <Route path="/inventory" element={<Navigate to="/inventory/stock" replace />} />
+      <Route path="/qc" element={<Navigate to="/qc/lots" replace />} />
+      {tenantRoutes.map((r) => (
+        <Route key={r.path} path={r.path} element={<Shell permission={r.permission}>{r.element}</Shell>} />
+      ))}
 
-      <Route path="/purchases/vendors" element={<Shell permission="vendor.view"><VendorListPage /></Shell>} />
-      <Route path="/purchases/vendors/new" element={<Shell permission="vendor.create"><VendorCreatePage /></Shell>} />
-      <Route path="/purchases/vendors/:id" element={<Shell permission="vendor.view"><VendorDetailPage /></Shell>} />
-      <Route path="/purchases/vendors/:id/edit" element={<Shell permission="vendor.edit"><VendorEditPage /></Shell>} />
+      {platformRoutes.map((r) => (
+        <Route key={r.path} path={r.path} element={<Shell permission={r.permission} area="platform">{r.element}</Shell>} />
+      ))}
 
-      <Route path="/purchases/purchase-orders" element={<Shell permission="purchase_order.view"><PurchaseOrderListPage /></Shell>} />
-      <Route path="/purchases/purchase-orders/new" element={<Shell permission="purchase_order.create"><PurchaseOrderCreatePage /></Shell>} />
-      <Route path="/purchases/purchase-orders/:id" element={<Shell permission="purchase_order.view"><PurchaseOrderDetailPage /></Shell>} />
-      <Route path="/purchases/purchase-orders/:id/edit" element={<Shell permission="purchase_order.edit"><PurchaseOrderEditPage /></Shell>} />
-
-      <Route path="/purchases/purchase-receives" element={<Shell permission="purchase_receive.view"><PurchaseReceiveListPage /></Shell>} />
-      <Route path="/purchases/purchase-receives/new" element={<Shell permission="purchase_receive.create"><PurchaseReceiveCreatePage /></Shell>} />
-      <Route path="/purchases/purchase-receives/:id" element={<Shell permission="purchase_receive.view"><PurchaseReceiveDetailPage /></Shell>} />
-
-      <Route path="/settings" element={<Navigate to="/settings/purchases" replace />} />
-      <Route path="/settings/vendor-fields" element={<Shell permission={['settings.view', 'settings.manage']}><VendorFieldsSettingsPage /></Shell>} />
-      <Route path="/settings/purchases" element={<Shell permission={['settings.view', 'settings.manage']}><PurchaseSettingsPage /></Shell>} />
       <Route path="*" element={<Shell><EmptyState icon={Compass} title="Page not found" hint="The page you are looking for does not exist." /></Shell>} />
     </Routes>
   );

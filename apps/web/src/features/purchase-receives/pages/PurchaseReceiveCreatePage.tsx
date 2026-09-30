@@ -5,6 +5,7 @@ import { PackageCheck } from 'lucide-react';
 import { purchaseReceiveSchema } from '@b2b/shared';
 import { Button, Card, CardBody, CardHeader, EmptyState, ErrorState, Field, FormSkeleton, Input, PageHeader, SearchSelect, Textarea } from '../../../components/ui';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
+import { shouldRetryWithSameKey, useIdempotencyKey } from '../../../hooks/useIdempotencyKey';
 import { toApiError } from '../../../lib/api';
 import { cn, formatQty, todayISO } from '../../../lib/utils';
 import { usePurchaseOrder, usePurchaseOrders } from '../../purchase-orders/hooks';
@@ -19,6 +20,8 @@ export function PurchaseReceiveCreatePage() {
   const openOrders = usePurchaseOrders({ page: 1, limit: 20, search: useDebouncedValue(poTerm, 250), status: 'OPEN', sortBy: 'createdAt', sortOrder: 'desc' });
   const next = useNextReceiveNumber(true);
   const create = useCreatePurchaseReceive();
+  // One Idempotency-Key per submission: a retry after a network failure replays the same GRN.
+  const idempotency = useIdempotencyKey();
 
   const [receiveNumber, setReceiveNumber] = useState('');
   const [receivedDate, setReceivedDate] = useState(todayISO());
@@ -65,11 +68,13 @@ export function PurchaseReceiveCreatePage() {
       return;
     }
     try {
-      const saved = await create.mutateAsync(payload.data);
+      const saved = await create.mutateAsync({ payload: payload.data, idempotencyKey: idempotency.keyFor(payload.data) });
+      idempotency.reset();
       toast.success(`${saved.receiveNumber} recorded`);
       navigate(`/purchases/purchase-receives/${saved.id}`, { replace: true });
     } catch (err) {
       const e = toApiError(err);
+      if (!shouldRetryWithSameKey(e.status)) idempotency.reset();
       const map: Record<string, string> = {};
       e.details.forEach((d) => {
         if (d.path.startsWith('lines.') && po.data) map[po.data.lines[Number(d.path.split('.')[1])]?.id ?? d.path] = d.message;

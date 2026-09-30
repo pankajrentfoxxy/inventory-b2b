@@ -17,12 +17,24 @@ const schema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters'),
   JWT_EXPIRES_IN: z.string().default('12h'),
+  // Phase 1: accept RS256 tokens issued by svc-auth (JWKS URL or PEM public key).
+  AUTH_JWKS_URL: z.string().url().optional(),
+  AUTH_JWT_PUBLIC_KEY: z.string().optional(),
+  AUTH_ISSUER: z.string().default('svc-auth'),
+  AUTH_AUDIENCE: z.string().default('b2b-inventory'),
   APP_ENCRYPTION_KEY: z
     .string()
     .min(1, 'APP_ENCRYPTION_KEY is required (32 bytes, base64)')
     .refine((v) => Buffer.from(v, 'base64').length === 32, 'APP_ENCRYPTION_KEY must decode to 32 bytes'),
   UPLOAD_DIR: z.string().default('./uploads'),
   MAX_UPLOAD_MB: z.coerce.number().positive().default(10),
+
+  // Outbox relay (phase-plan/README.md 5.8). Without AMQP_URL events are logged and marked
+  // published so development does not need a broker.
+  AMQP_URL: z.string().url().optional(),
+  AMQP_EXCHANGE: z.string().default('domain.events'),
+  OUTBOX_RELAY: z.enum(['on', 'off']).default('on'),
+  OUTBOX_POLL_MS: z.coerce.number().int().positive().default(200),
 
   // GST portal lookup provider (see modules/integrations/gst.service.ts)
   GST_PROVIDER: z.enum(['none', 'zoho-session']).default('none'),

@@ -1,0 +1,557 @@
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (17ad6a59-79ea-49af-a3fb-7a70ba28e14e, 038ad41f-d7a2-462a-b8d8-d426000088ac, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 20.000, 2026-09-30 04:52:03.757+00, 2026-09-30 04:52:03.895+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (17ad6a59-79ea-49af-a3fb-7a70ba28e14e, 038ad41f-d7a2-462a-b8d8-d426000088ac, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 20.000, 2026-09-30 04:52:03.757+00, 2026-09-30 04:52:03.929+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (17ad6a59-79ea-49af-a3fb-7a70ba28e14e, 038ad41f-d7a2-462a-b8d8-d426000088ac, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 20.000, 2026-09-30 04:52:03.757+00, 2026-09-30 04:52:03.939+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (17ad6a59-79ea-49af-a3fb-7a70ba28e14e, 038ad41f-d7a2-462a-b8d8-d426000088ac, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 20.000, 2026-09-30 04:52:03.757+00, 2026-09-30 04:52:03.954+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (17ad6a59-79ea-49af-a3fb-7a70ba28e14e, 038ad41f-d7a2-462a-b8d8-d426000088ac, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 20.000, 2026-09-30 04:52:03.757+00, 2026-09-30 04:52:03.967+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (17ad6a59-79ea-49af-a3fb-7a70ba28e14e, 038ad41f-d7a2-462a-b8d8-d426000088ac, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 20.000, 2026-09-30 04:52:03.757+00, 2026-09-30 04:52:03.979+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (17ad6a59-79ea-49af-a3fb-7a70ba28e14e, 038ad41f-d7a2-462a-b8d8-d426000088ac, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 20.000, 2026-09-30 04:52:03.757+00, 2026-09-30 04:52:03.995+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (17ad6a59-79ea-49af-a3fb-7a70ba28e14e, 038ad41f-d7a2-462a-b8d8-d426000088ac, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 20.000, 2026-09-30 04:52:03.757+00, 2026-09-30 04:52:04.014+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (17ad6a59-79ea-49af-a3fb-7a70ba28e14e, 038ad41f-d7a2-462a-b8d8-d426000088ac, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 20.000, 2026-09-30 04:52:03.757+00, 2026-09-30 04:52:04.031+00)."), column: None, hint: None }), transient: false })
+▶ R1 - over-receipt race
+  ✖ 10 concurrent GRNs for the full remaining quantity: exactly one succeeds, the rest are 422 OVER_RECEIPT (322.4445ms)
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (d5e0c631-3583-45b2-95a3-0471e27b6b63, 8e69e958-b7e6-47a0-b247-2577a296b86c, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 12.000, 2026-09-30 04:52:04.066+00, 2026-09-30 04:52:04.197+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (d5e0c631-3583-45b2-95a3-0471e27b6b63, 8e69e958-b7e6-47a0-b247-2577a296b86c, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 12.000, 2026-09-30 04:52:04.066+00, 2026-09-30 04:52:04.213+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (d5e0c631-3583-45b2-95a3-0471e27b6b63, 8e69e958-b7e6-47a0-b247-2577a296b86c, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 12.000, 2026-09-30 04:52:04.066+00, 2026-09-30 04:52:04.225+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (d5e0c631-3583-45b2-95a3-0471e27b6b63, 8e69e958-b7e6-47a0-b247-2577a296b86c, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 12.000, 2026-09-30 04:52:04.066+00, 2026-09-30 04:52:04.235+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (d5e0c631-3583-45b2-95a3-0471e27b6b63, 8e69e958-b7e6-47a0-b247-2577a296b86c, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 12.000, 2026-09-30 04:52:04.066+00, 2026-09-30 04:52:04.243+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (d5e0c631-3583-45b2-95a3-0471e27b6b63, 8e69e958-b7e6-47a0-b247-2577a296b86c, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 12.000, 2026-09-30 04:52:04.066+00, 2026-09-30 04:52:04.253+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (d5e0c631-3583-45b2-95a3-0471e27b6b63, 8e69e958-b7e6-47a0-b247-2577a296b86c, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 12.000, 2026-09-30 04:52:04.066+00, 2026-09-30 04:52:04.261+00)."), column: None, hint: None }), transient: false })
+  ✖ 10 concurrent partial GRNs of 3 against 10 ordered: exactly three succeed (225.7161ms)
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Raw query failed. Code: `23514`. Message: `ERROR: new row for relation "purchase_order_lines" violates check constraint "purchase_order_lines_received_within_ordered"
+DETAIL: Failing row contains (ff797ead-d0b7-4242-a0c4-1bb4a9317360, a7db22fb-09c6-4598-b3af-a9de92919fb9, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, 11.000, 2026-09-30 04:52:04.286+00, 2026-09-30 04:52:04.286+00).`
+prisma:error 
+Invalid `prisma.$executeRaw()` invocation:
+
+
+Raw query failed. Code: `23514`. Message: `ERROR: new row for relation "purchase_order_lines" violates check constraint "purchase_order_lines_received_within_ordered"
+DETAIL: Failing row contains (ff797ead-d0b7-4242-a0c4-1bb4a9317360, a7db22fb-09c6-4598-b3af-a9de92919fb9, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, -1.000, 2026-09-30 04:52:04.286+00, 2026-09-30 04:52:04.286+00).`
+  ✔ the database CHECK rejects over-receipt even when the application layer is bypassed (60.9663ms)
+✖ R1 - over-receipt race (1955.1876ms)
+▶ R2 - idempotent GRN creation
+  ✔ requires a well-formed Idempotency-Key (67.407ms)
+  ✖ replays the same response for the same key + body and creates one GRN (94.3858ms)
+  ✔ 5 concurrent submits with the same key create exactly one GRN (134.984ms)
+  ✔ rejects the same key with a different body (422 IDEMPOTENCY_KEY_REUSED) (100.7792ms)
+  ✖ replays business errors too, and a failed attempt records nothing (56.1768ms)
+  ✔ scopes keys per tenant: another organization may use the same key (180.4588ms)
+✖ R2 - idempotent GRN creation (634.9664ms)
+▶ R3 - document numbering under load
+  ✔ 50 concurrent PO creates for a brand-new organization yield 50 unique, gap-free numbers (1592.3769ms)
+  ✔ concurrent GRNs against different orders receive unique, sequential numbers (831.3289ms)
+✔ R3 - document numbering under load (2423.9967ms)
+▶ R4 - optimistic concurrency on the purchase order
+  ✖ exposes version, bumps it on every write and rejects a stale version with 409 (85.537ms)
+  ✖ two parallel edits based on the same version: exactly one wins (102.001ms)
+  ✖ issue and edit in parallel: each write either applies once or is rejected, never lost (112.1072ms)
+✖ R4 - optimistic concurrency on the purchase order (300.2236ms)
+▶ R5 - received lines are protected
+  ✔ cannot reduce quantity below the received quantity (18.917ms)
+  ✖ cannot swap the item on a received line (46.339ms)
+  ✔ cannot remove a received line or change the vendor (34.291ms)
+  ✖ a lawful edit (increase quantity, change rate) still works and bumps the version (50.211ms)
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (de33586e-3e7b-4c60-a474-7950b92ac0f1, 7e1ba480-c330-4d26-a700-cbd17c09bbbe, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 4.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 400.00, 400.00, 72.00, 472.00, 6.000, 2026-09-30 04:52:07.964+00, 2026-09-30 04:52:08.02+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (14f0cdc2-fc2e-4d24-8539-9cc6cf23fa67, b54616ac-6792-4699-9a5c-2b3ee1d26d33, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 4.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 400.00, 400.00, 72.00, 472.00, 6.000, 2026-09-30 04:52:08.081+00, 2026-09-30 04:52:08.131+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (ab5c6b66-5533-4ccf-b667-a8b20dfb73d8, ab4f78b2-4546-4980-be5e-bc8a11bc1c44, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 4.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 400.00, 400.00, 72.00, 472.00, 6.000, 2026-09-30 04:52:08.19+00, 2026-09-30 04:52:08.241+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (2ce86ee2-bf8a-4f07-94f1-80e1f2523930, 007d0f27-8f0c-4fb2-b1f5-fee46f831493, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 4.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 400.00, 400.00, 72.00, 472.00, 6.000, 2026-09-30 04:52:08.297+00, 2026-09-30 04:52:08.346+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:149:34
+
+  146   },
+  147 });
+  148 for (const l of active) {
+→ 149   await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (7a254c4a-b316-44a4-b606-d55a9bb08f5f, 8fe0acc7-7db4-4cf6-9938-c358345dd937, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 4.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 400.00, 400.00, 72.00, 472.00, 6.000, 2026-09-30 04:52:08.407+00, 2026-09-30 04:52:08.462+00)."), column: None, hint: None }), transient: false })
+  ✔ edit vs. receive race: ordered quantity never drops below the received quantity (558.1475ms)
+✖ R5 - received lines are protected (812.9ms)
+▶ R6 - cancel vs. receive race
+  ✖ cancelling and receiving concurrently never both succeed (15 rounds) (112.7174ms)
+  ✔ close vs. receive: a closed order never gains a receipt afterwards (588.8189ms)
+✖ R6 - cancel vs. receive race (702.0288ms)
+▶ R7 - status and quantities are recomputed inside the same transaction
+  ✖ 5 concurrent receipts of 2 each fill a line of 10 exactly, then the order completes (252.1636ms)
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:171:34
+
+  168 await prisma.$transaction(async (tx) => {
+  169   await tx.purchaseReceive.update({ where: { id }, data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: reason } });
+  170   for (const l of r.lines) {
+→ 171     await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (27dab5a0-2087-4f92-8f37-42b547a40497, b736efef-e179-4d43-a9d9-ba4ff00899aa, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, -3.000, 2026-09-30 04:52:09.484+00, 2026-09-30 04:52:09.702+00)."), column: None, hint: None }), transient: false })
+prisma:error 
+Invalid `tx.purchaseOrderLine.update()` invocation in
+C:\rentfoxxy\b2b-inventory\apps\api\src\modules\purchases\purchaseReceive.service.ts:171:34
+
+  168 await prisma.$transaction(async (tx) => {
+  169   await tx.purchaseReceive.update({ where: { id }, data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: reason } });
+  170   for (const l of r.lines) {
+→ 171     await tx.purchaseOrderLine.update(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"purchase_order_lines\" violates check constraint \"purchase_order_lines_received_within_ordered\"", severity: "ERROR", detail: Some("Failing row contains (27dab5a0-2087-4f92-8f37-42b547a40497, b736efef-e179-4d43-a9d9-ba4ff00899aa, 89346a12-507f-4dbb-a05c-91aa083db83b, 1, 9367e66f-e2a1-4487-9b0c-071b3b3c30bf, Widget A, SKU-1, null, null, 10.000, pcs, 100.0000, 37b9cbcd-d14a-46ba-a1c9-1532e97ece10, GST18, 18.00, 1000.00, 1000.00, 180.00, 1180.00, -3.000, 2026-09-30 04:52:09.484+00, 2026-09-30 04:52:09.705+00)."), column: None, hint: None }), transient: false })
+  ✖ cancelling two different GRNs concurrently reverses both; cancelling the same GRN twice reverses once (255.9042ms)
+✖ R7 - status and quantities are recomputed inside the same transaction (508.6541ms)
+▶ outbox - audit.recorded.v1 events
+  ✖ every PO / GRN action writes an envelope in the same transaction, carrying the request correlation id (140.8215ms)
+  ✔ a failed transaction leaves no outbox row (64.9309ms)
+  ✔ the relay publishes every event exactly once and recovers from a broker outage (543.355ms)
+✖ outbox - audit.recorded.v1 events (749.4643ms)
+▶ inbox - processed_events
+  ✔ the same event delivered three times has its effect once (24.2847ms)
+  ✔ concurrent duplicate deliveries still apply once (9.5212ms)
+✔ inbox - processed_events (34.1395ms)
+▶ correlation ids, health and error envelope
+  ✔ echoes an inbound correlation id and mints one when absent (5.4976ms)
+  ✔ puts the correlation id into every error envelope (12.0281ms)
+  ✔ drops identity headers sent by clients (89.8697ms)
+  ✔ /health/live and /health/ready report status; ready is 503 when a dependency is down (11.1533ms)
+✔ correlation ids, health and error envelope (118.976ms)
+▶ tenant isolation sweep (Phase 0 step 10)
+  ✔ every purchase route answers 404 for another tenant ids, including transitions and receives (246.3102ms)
+✔ tenant isolation sweep (Phase 0 step 10) (246.4977ms)
+ℹ tests 33
+ℹ suites 11
+ℹ pass 20
+ℹ fail 13
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9136.085
+
+✖ failing tests:
+
+test at test\purchases.concurrency.test.ts:8:790
+✖ 10 concurrent GRNs for the full remaining quantity: exactly one succeeds, the rest are 422 OVER_RECEIPT (322.4445ms)
+  AssertionError [ERR_ASSERTION]: {"success":false,"message":"Something went wrong. Please try again.","error":{"code":"INTERNAL_ERROR","message":"Something went wrong. Please try again.","correlationId":"01a0f0a7-cc62-71d5-a395-ba4a9856cd4e"}}
+  
+  500 !== 422
+  
+      at TestContext.<anonymous> (C:\rentfoxxy\b2b-inventory\apps\api\test\purchases.concurrency.test.ts:164:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1794:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 422,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\purchases.concurrency.test.ts:8:1671
+✖ 10 concurrent partial GRNs of 3 against 10 ordered: exactly three succeed (225.7161ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 7
+  
+      at TestContext.<anonymous> (C:\rentfoxxy\b2b-inventory\apps\api\test\purchases.concurrency.test.ts:180:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 7,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\purchases.concurrency.test.ts:8:3308
+✖ replays the same response for the same key + body and creates one GRN (94.3858ms)
+  AssertionError [ERR_ASSERTION]: the GRN row records the key
+  + actual - expected
+  
+  + null
+  - '52e4afe3-dcbd-40d3-9cea-827875bab9ed'
+  
+      at TestContext.<anonymous> (C:\rentfoxxy\b2b-inventory\apps\api\test\purchases.concurrency.test.ts:223:12)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: '52e4afe3-dcbd-40d3-9cea-827875bab9ed',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\purchases.concurrency.test.ts:8:5475
+✖ replays business errors too, and a failed attempt records nothing (56.1768ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'VALIDATION_ERROR'
+  - 'OVER_RECEIPT'
+  
+      at TestContext.<anonymous> (C:\rentfoxxy\b2b-inventory\apps\api\test\purchases.concurrency.test.ts:261:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'VALIDATION_ERROR',
+    expected: 'OVER_RECEIPT',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\purchases.concurrency.test.ts:8:8079
+✖ exposes version, bumps it on every write and rejects a stale version with 409 (85.537ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (C:\rentfoxxy\b2b-inventory\apps\api\test\purchases.concurrency.test.ts:315:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1794:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\purchases.concurrency.test.ts:8:9601
+✖ two parallel edits based on the same version: exactly one wins (102.001ms)
+  AssertionError [ERR_ASSERTION]: [{"data":{"id":"8d89acf6-f7df-4bb9-b400-e8582bc2a36f","organizationId":"89346a12-507f-4dbb-a05c-91aa083db83b","purchaseOrderNumber":"PO-00011","referenceNumber":null,"orderDate":"2026-09-30","expectedDeliveryDate":null,"status":"DRAFT","version":0,"receiveState":"NONE","orderedQuantity":16,"receivedQuantity":0,"vendorId":"4b8b8eab-aa9a-4437-8a1d-591837641037","vendor":{"id":"4b8b8eab-aa9a-4437-8a1d-591837641037","displayName":"Alpha Concurrency Supplier","companyName":"Acme Components Pvt Ltd","email":"accounts@acme.example","phone":"+91 02240001234","gstin":null,"status":"ACTIVE","gstTreatment":{"id":"93ad1925-2273-4c96-b74d-e7443b914159","name":"Unregistered Business"},"sourceOfSupply":{"id":"2fd32fbc-6d3f-47f8-a173-d23305925db9","code":"27","name":"Maharashtra"},"billingAddress":{"attention":"Accounts","addressLine1":"12 MIDC Road","addressLine2":null,"city":"Pune","state":"Maharashtra","stateCode":"27","postalCode":"411001","countryCode":"IN","phone":"02022223333"}},"locationId":"8ef76e95-cbd0-4729-98d5-9ba40456b27c","location":{"id":"8ef76e95-cbd0-4729-98d5-9ba40456b27c","name":"Head Office"},"deliveryType":"LOCATION","deliveryLocationId":"8ef76e95-cbd0-4729-98d5-9ba40456b27c","deliveryLocation":{"id":"8ef76e95-cbd0-4729-98d5-9ba40456b27c","name":"Head Office"},"deliveryAddress":{"city":"Mumbai","name":"Head Office","phone":null,"state":"Maharashtra","attention":null,"stateCode":"27","postalCode":"400001","countryCode":"IN","addressLine1":"1 Test Road","addressLine2":null},"sourceOfSupplyCode":"27","placeOfSupplyCode":"27","isIntraState":true,"paymentTermId":null,"paymentTerm":null,"shipmentPreference":null,"currencyCode":"INR","lines":[{"id":"ae7a875a-0304-4673-b220-69329654eefa","lineNumber":1,"itemId":"9367e66f-e2a1-4487-9b0c-071b3b3c30bf","item":{"id":"9367e66f-e2a1-4487-9b0c-071b3b3c30bf","name":"Widget A","sku":"SKU-1","unit":"pcs","available":true},"name":"Widget A","sku":"SKU-1","description":null,"hsnCode":null,"quantity":11,"unit":"pcs","rate":100,"taxId":"37b9cbcd-d14a-46ba-a1c9-1532e97ece10","taxName":"GST18","taxRate":18,"amount":1100,"taxableAmount":1100,"taxAmount":198,"total":1298,"receivedQuantity":0,"remainingQuantity":11},{"id":"3ae13fb5-f022-44ed-97b9-578602527bf9","lineNumber":2,"itemId":"b4918f65-49d4-4fd2-8b5c-ca4f993397f2","item":{"id":"b4918f65-49d4-4fd2-8b5c-ca4f993397f2","name":"Widget B","sku":"SKU-2","unit":"pcs","available":true},"name":"Widget B","sku":"SKU-2","description":null,"hsnCode":null,"quantity":5,"unit":"pcs","rate":100,"taxId":"37b9cbcd-d14a-46ba-a1c9-1532e97ece10","taxName":"GST18","taxRate":18,"amount":500,"taxableAmount":500,"taxAmount":90,"total":590,"receivedQuantity":0,"remainingQuantity":5}],"discountType":"PERCENT","discountValue":0,"taxDeductionType":"NONE","taxDeductionRate":0,"taxDeductionLabel":null,"adjustment":0,"adjustmentLabel":null,"subTotal":1600,"discountAmount":0,"taxTotal":288,"taxBreakup":[{"rate":9,"label":"CGST","amount":144},{"rate":9,"label":"SGST","amount":144}],"taxDeductionAmount":0,"total":1888,"notes":null,"terms":null,"customFields":[],"receives":[],"counts":{"documents":0,"receives":0},"issuedAt":null,"cancelledAt":null,"cancelReason":null,"closedAt":null,"createdAt":"2026-09-30T04:52:07.493Z","updatedAt":"2026-09-30T04:52:07.535Z","createdById":"c99cad41-c33d-4b87-95b7-8b89b8da4b2a","updatedById":"c99cad41-c33d-4b87-95b7-8b89b8da4b2a"}},{"data":{"id":"8d89acf6-f7df-4bb9-b400-e8582bc2a36f","organizationId":"89346a12-507f-4dbb-a05c-91aa083db83b","purchaseOrderNumber":"PO-00011","referenceNumber":null,"orderDate":"2026-09-30","expectedDeliveryDate":null,"status":"DRAFT","version":0,"receiveState":"NONE","orderedQuantity":17,"receivedQuantity":0,"vendorId":"4b8b8eab-aa9a-4437-8a1d-591837641037","vendor":{"id":"4b8b8eab-aa9a-4437-8a1d-591837641037","displayName":"Alpha Concurrency Supplier","companyName":"Acme Components Pvt Ltd","email":"accounts@acme.example","phone":"+91 02240001234","gstin":null,"status":"ACTIVE","gstTreatment":{"id":"93ad1925-2273-4c96-b74d-e7443b914159","name":"Unregistered Business"},"sourceOfSupply":{"id":"2fd32fbc-6d3f-47f8-a173-d23305925db9","code":"27","name":"Maharashtra"},"billingAddress":{"attention":"Accounts","addressLine1":"12 MIDC Road","addressLine2":null,"city":"Pune","state":"Maharashtra","stateCode":"27","postalCode":"411001","countryCode":"IN","phone":"02022223333"}},"locationId":"8ef76e95-cbd0-4729-98d5-9ba40456b27c","location":{"id":"8ef76e95-cbd0-4729-98d5-9ba40456b27c","name":"Head Office"},"deliveryType":"LOCATION","deliveryLocationId":"8ef76e95-cbd0-4729-98d5-9ba40456b27c","deliveryLocation":{"id":"8ef76e95-cbd0-4729-98d5-9ba40456b27c","name":"Head Office"},"deliveryAddress":{"city":"Mumbai","name":"Head Office","phone":null,"state":"Maharashtra","attention":null,"stateCode":"27","postalCode":"400001","countryCode":"IN","addressLine1":"1 Test Road","addressLine2":null},"sourceOfSupplyCode":"27","placeOfSupplyCode":"27","isIntraState":true,"paymentTermId":null,"paymentTerm":null,"shipmentPreference":null,"currencyCode":"INR","lines":[{"id":"ae7a875a-0304-4673-b220-69329654eefa","lineNumber":1,"itemId":"9367e66f-e2a1-4487-9b0c-071b3b3c30bf","item":{"id":"9367e66f-e2a1-4487-9b0c-071b3b3c30bf","name":"Widget A","sku":"SKU-1","unit":"pcs","available":true},"name":"Widget A","sku":"SKU-1","description":null,"hsnCode":null,"quantity":12,"unit":"pcs","rate":100,"taxId":"37b9cbcd-d14a-46ba-a1c9-1532e97ece10","taxName":"GST18","taxRate":18,"amount":1200,"taxableAmount":1200,"taxAmount":216,"total":1416,"receivedQuantity":0,"remainingQuantity":12},{"id":"3ae13fb5-f022-44ed-97b9-578602527bf9","lineNumber":2,"itemId":"b4918f65-49d4-4fd2-8b5c-ca4f993397f2","item":{"id":"b4918f65-49d4-4fd2-8b5c-ca4f993397f2","name":"Widget B","sku":"SKU-2","unit":"pcs","available":true},"name":"Widget B","sku":"SKU-2","description":null,"hsnCode":null,"quantity":5,"unit":"pcs","rate":100,"taxId":"37b9cbcd-d14a-46ba-a1c9-1532e97ece10","taxName":"GST18","taxRate":18,"amount":500,"taxableAmount":500,"taxAmount":90,"total":590,"receivedQuantity":0,"remainingQuantity":5}],"discountType":"PERCENT","discountValue":0,"taxDeductionType":"NONE","taxDeductionRate":0,"taxDeductionLabel":null,"adjustment":0,"adjustmentLabel":null,"subTotal":1700,"discountAmount":0,"taxTotal":306,"taxBreakup":[{"rate":9,"label":"CGST","amount":153},{"rate":9,"label":"SGST","amount":153}],"taxDeductionAmount":0,"total":2006,"notes":null,"terms":null,"customFields":[],"receives":[],"counts":{"documents":0,"receives":0},"issuedAt":null,"cancelledAt":null,"cancelReason":null,"closedAt":null,"createdAt":"2026-09-30T04:52:07.493Z","updatedAt":"2026-09-30T04:52:07.536Z","createdById":"c99cad41-c33d-4b87-95b7-8b89b8da4b2a","updatedById":"c99cad41-c33d-4b87-95b7-8b89b8da4b2a"}}]
+  + actual - expected
+  
+    [
+      200,
+  +   200
+  -   409
+    ]
+  
+      at TestContext.<anonymous> (C:\rentfoxxy\b2b-inventory\apps\api\test\purchases.concurrency.test.ts:342:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 200, 200 ],
+    expected: [ 200, 409 ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at test\purchases.concurrency.test.ts:8:10305
+✖ issue and edit in parallel: each write either applies once or is rejected, never lost (112.1072ms)
+  AssertionError [ERR_ASSERTION]: version counts exactly the writes that were applied
+  
+  0 !== 2
+  
+      at TestContext.<anonymous> (C:\rentfoxxy\b2b-inventory\apps\api\test\purchases.concurrency.test.ts:361:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\purchases.concurrency.test.ts:8:11793
+✖ cannot swap the item on a received line (46.339ms)
+  AssertionError [ERR_ASSERTION]: {"data":{"id":"602b2f41-2385-438d-8fec-8bf0e12eb59d","organizationId":"89346a12-507f-4dbb-a05c-91aa083db83b","purchaseOrderNumber":"PO-00013","referenceNumber":null,"orderDate":"2026-09-30","expectedDeliveryDate":null,"status":"PARTIALLY_RECEIVED","version":0,"receiveState":"PARTIAL","orderedQuantity":15,"receivedQuantity":4,"vendorId":"4b8b8eab-aa9a-4437-8a1d-591837641037","vendor":{"id":"4b8b8eab-aa9a-4437-8a1d-591837641037","displayName":"Alpha Concurrency Supplier","companyName":"Acme Components Pvt Ltd","email":"accounts@acme.example","phone":"+91 02240001234","gstin":null,"status":"ACTIVE","gstTreatment":{"id":"93ad1925-2273-4c96-b74d-e7443b914159","name":"Unregistered Business"},"sourceOfSupply":{"id":"2fd32fbc-6d3f-47f8-a173-d23305925db9","code":"27","name":"Maharashtra"},"billingAddress":{"attention":"Accounts","addressLine1":"12 MIDC Road","addressLine2":null,"city":"Pune","state":"Maharashtra","stateCode":"27","postalCode":"411001","countryCode":"IN","phone":"02022223333"}},"locationId":"8ef76e95-cbd0-4729-98d5-9ba40456b27c","location":{"id":"8ef76e95-cbd0-4729-98d5-9ba40456b27c","name":"Head Office"},"deliveryType":"LOCATION","deliveryLocationId":"8ef76e95-cbd0-4729-98d5-9ba40456b27c","deliveryLocation":{"id":"8ef76e95-cbd0-4729-98d5-9ba40456b27c","name":"Head Office"},"deliveryAddress":{"city":"Mumbai","name":"Head Office","phone":null,"state":"Maharashtra","attention":null,"stateCode":"27","postalCode":"400001","countryCode":"IN","addressLine1":"1 Test Road","addressLine2":null},"sourceOfSupplyCode":"27","placeOfSupplyCode":"27","isIntraState":true,"paymentTermId":null,"paymentTerm":null,"shipmentPreference":null,"currencyCode":"INR","lines":[{"id":"7013bde1-cd47-41d5-a004-4d2e54d8b2fb","lineNumber":1,"itemId":"1ecb01f9-5c08-4a45-b688-ecbb6de8ed10","item":{"id":"1ecb01f9-5c08-4a45-b688-ecbb6de8ed10","name":"Widget C","sku":"SKU-3","unit":"pcs","available":true},"name":"Widget C","sku":"SKU-3","description":null,"hsnCode":null,"quantity":10,"unit":"pcs","rate":100,"taxId":"37b9cbcd-d14a-46ba-a1c9-1532e97ece10","taxName":"GST18","taxRate":18,"amount":1000,"taxableAmount":1000,"taxAmount":180,"total":1180,"receivedQuantity":4,"remainingQuantity":6},{"id":"fef0e76c-2e91-475a-bf6b-4f4e1a5e6841","lineNumber":2,"itemId":"b4918f65-49d4-4fd2-8b5c-ca4f993397f2","item":{"id":"b4918f65-49d4-4fd2-8b5c-ca4f993397f2","name":"Widget B","sku":"SKU-2","unit":"pcs","available":true},"name":"Widget B","sku":"SKU-2","description":null,"hsnCode":null,"quantity":5,"unit":"pcs","rate":100,"taxId":"37b9cbcd-d14a-46ba-a1c9-1532e97ece10","taxName":"GST18","taxRate":18,"amount":500,"taxableAmount":500,"taxAmount":90,"total":590,"receivedQuantity":0,"remainingQuantity":5}],"discountType":"PERCENT","discountValue":0,"taxDeductionType":"NONE","taxDeductionRate":0,"taxDeductionLabel":null,"adjustment":0,"adjustmentLabel":null,"subTotal":1500,"discountAmount":0,"taxTotal":270,"taxBreakup":[{"rate":9,"label":"CGST","amount":135},{"rate":9,"label":"SGST","amount":135}],"taxDeductionAmount":0,"total":1770,"notes":null,"terms":null,"customFields":[],"receives":[{"id":"409a4788-9174-48ae-b125-a6fbaf800255","receiveNumber":"GRN-00009","receivedDate":"2026-10-01","totalQuantity":4,"status":"RECEIVED","createdAt":"2026-09-30T04:52:07.748Z"}],"counts":{"documents":0,"receives":1},"issuedAt":"2026-09-30T04:52:07.705Z","cancelledAt":null,"cancelReason":null,"closedAt":null,"createdAt":"2026-09-30T04:52:07.706Z","updatedAt":"2026-09-30T04:52:07.829Z","createdById":"c99cad41-c33d-4b87-95b7-8b89b8da4b2a","updatedById":"c99cad41-c33d-4b87-95b7-8b89b8da4b2a"}}
+  
+  200 !== 422
+  
+      at TestContext.<anonymous> (C:\rentfoxxy\b2b-inventory\apps\api\test\purchases.concurrency.test.ts:386:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 200,
+    expected: 422,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\purchases.concurrency.test.ts:8:12802
+✖ a lawful edit (increase quantity, change rate) still works and bumps the version (50.211ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (C:\rentfoxxy\b2b-inventory\apps\api\test\purchases.concurrency.test.ts:404:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\purchases.concurrency.test.ts:8:13967
+✖ cancelling and receiving concurrently never both succeed (15 rounds) (112.7174ms)
+  AssertionError [ERR_ASSERTION]: a cancelled order never has a live GRN
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (C:\rentfoxxy\b2b-inventory\apps\api\test\purchases.concurrency.test.ts:437:16)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1794:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\purchases.concurrency.test.ts:8:15758
+✖ 5 concurrent receipts of 2 each fill a line of 10 exactly, then the order completes (252.1636ms)
+  AssertionError [ERR_ASSERTION]: each receipt bumped the version once
+  
+  0 !== 5
+  
+      at TestContext.<anonymous> (C:\rentfoxxy\b2b-inventory\apps\api\test\purchases.concurrency.test.ts:483:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1794:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 5,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\purchases.concurrency.test.ts:8:16567
+✖ cancelling two different GRNs concurrently reverses both; cancelling the same GRN twice reverses once (255.9042ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  500 !== 409
+  
+      at TestContext.<anonymous> (C:\rentfoxxy\b2b-inventory\apps\api\test\purchases.concurrency.test.ts:514:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 409,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\purchases.concurrency.test.ts:8:18203
+✖ every PO / GRN action writes an envelope in the same transaction, carrying the request correlation id (140.8215ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  null !== 0
+  
+      at TestContext.<anonymous> (C:\rentfoxxy\b2b-inventory\apps\api\test\purchases.concurrency.test.ts:552:12)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1794:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

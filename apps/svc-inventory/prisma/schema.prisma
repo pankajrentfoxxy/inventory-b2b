@@ -1,0 +1,311 @@
+// svc-inventory (phase-04): double-entry stock ledger. stock_postings / stock_movements /
+// serial_events are append-only (runtime role has no UPDATE/DELETE); balances are materialised in
+// the same transaction as the ledger lines. Every table is tenant-owned and under RLS.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("MIGRATE_DATABASE_URL")
+}
+
+/// Local replica of master products (from master.product.* events).
+model ItemRef {
+  id             String   @id @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  sku            String   @db.VarChar(40)
+  name           String   @db.VarChar(200)
+  trackInventory Boolean  @map("track_inventory")
+  isSerialized   Boolean  @map("is_serialized")
+  requiresImei   Boolean  @map("requires_imei")
+  serialPattern  String?  @map("serial_pattern") @db.VarChar(120)
+  qcRequired     Boolean  @map("qc_required")
+  unitCode       String   @map("unit_code") @db.VarChar(10)
+  status         String   @db.VarChar(10)
+  version        Int
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, sku])
+  @@map("item_refs")
+}
+
+model WarehouseRef {
+  id        String   @id @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  code      String   @db.VarChar(12)
+  name      String   @db.VarChar(100)
+  status    String   @db.VarChar(10)
+  version   Int
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId])
+  @@map("warehouse_refs")
+}
+
+model BinRef {
+  id          String   @id @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  warehouseId String   @map("warehouse_id") @db.Uuid
+  code        String   @db.VarChar(20)
+  status      String   @db.VarChar(10)
+  version     Int
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, warehouseId])
+  @@map("bin_refs")
+}
+
+/// Append-only.
+model StockPosting {
+  id                 String   @id @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  postingType        String   @map("posting_type") @db.VarChar(30)
+  refType            String   @map("ref_type") @db.VarChar(30)
+  refId              String   @map("ref_id") @db.Uuid
+  refNumber          String?  @map("ref_number") @db.VarChar(60)
+  idempotencyKey     String   @map("idempotency_key") @db.VarChar(160)
+  payloadHash        String   @map("payload_hash") @db.Char(64)
+  requestedByService String   @map("requested_by_service") @db.VarChar(40)
+  actorId            String?  @map("actor_id") @db.Uuid
+  reversalOf         String?  @map("reversal_of") @db.Uuid
+  postedAt           DateTime @default(now()) @map("posted_at") @db.Timestamptz(6)
+
+  movements    StockMovement[]
+  serialEvents SerialEvent[]
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, refType, refId])
+  @@map("stock_postings")
+}
+
+/// Append-only. Signed quantities; every posting sums to zero per item.
+model StockMovement {
+  id          String   @id @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  postingId   String   @map("posting_id") @db.Uuid
+  lineNo      Int      @map("line_no")
+  itemId      String   @map("item_id") @db.Uuid
+  warehouseId String?  @map("warehouse_id") @db.Uuid
+  binId       String?  @map("bin_id") @db.Uuid
+  partyId     String?  @map("party_id") @db.Uuid
+  bucket      String   @db.VarChar(20)
+  qty         Decimal  @db.Decimal(18, 3)
+  unitCost    Decimal? @map("unit_cost") @db.Decimal(18, 4)
+  gradeCode   String?  @map("grade_code") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  posting StockPosting @relation(fields: [postingId], references: [id])
+
+  @@unique([postingId, lineNo])
+  @@index([tenantId, itemId, warehouseId, createdAt])
+  @@map("stock_movements")
+}
+
+model StockBalance {
+  tenantId    String   @map("tenant_id") @db.Uuid
+  itemId      String   @map("item_id") @db.Uuid
+  warehouseId String   @map("warehouse_id") @db.Uuid
+  /// 00000000-0000-0000-0000-000000000000 = unbinned
+  binId       String   @map("bin_id") @db.Uuid
+  bucket      String   @db.VarChar(20)
+  qty         Decimal  @default(0) @db.Decimal(18, 3)
+  version     BigInt   @default(0)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@id([tenantId, itemId, warehouseId, binId, bucket])
+  @@index([tenantId, warehouseId, bucket])
+  @@map("stock_balances")
+}
+
+/// DELIVERED stock keyed to the customer (traceability, never counted as on-hand).
+model CustomerStockBalance {
+  tenantId  String   @map("tenant_id") @db.Uuid
+  itemId    String   @map("item_id") @db.Uuid
+  partyId   String   @map("party_id") @db.Uuid
+  bucket    String   @db.VarChar(20)
+  qty       Decimal  @default(0) @db.Decimal(18, 3)
+  version   BigInt   @default(0)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@id([tenantId, itemId, partyId, bucket])
+  @@map("customer_stock_balances")
+}
+
+model SerialUnit {
+  id               String    @id @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  itemId           String    @map("item_id") @db.Uuid
+  serialNo         String    @map("serial_no") @db.VarChar(80)
+  imei             String?   @db.VarChar(20)
+  bucket           String    @db.VarChar(20)
+  warehouseId      String?   @map("warehouse_id") @db.Uuid
+  binId            String?   @map("bin_id") @db.Uuid
+  partyId          String?   @map("party_id") @db.Uuid
+  gradeCode        String?   @map("grade_code") @db.VarChar(20)
+  qcStatus         String    @default("PENDING") @map("qc_status") @db.VarChar(10)
+  unitCost         Decimal?  @map("unit_cost") @db.Decimal(18, 4)
+  poId             String?   @map("po_id") @db.Uuid
+  grnId            String?   @map("grn_id") @db.Uuid
+  qcLotId          String?   @map("qc_lot_id") @db.Uuid
+  soId             String?   @map("so_id") @db.Uuid
+  reservationId    String?   @map("reservation_id") @db.Uuid
+  dcId             String?   @map("dc_id") @db.Uuid
+  shipmentId       String?   @map("shipment_id") @db.Uuid
+  warrantyPolicyId String?   @map("warranty_policy_id") @db.Uuid
+  warrantyStart    DateTime? @map("warranty_start") @db.Date
+  warrantyEnd      DateTime? @map("warranty_end") @db.Date
+  version          BigInt    @default(0)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  events SerialEvent[]
+
+  @@index([tenantId, itemId, warehouseId, bucket, gradeCode])
+  @@map("serial_units")
+}
+
+/// Append-only history of every serial move.
+model SerialEvent {
+  id           String   @id @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  serialUnitId String   @map("serial_unit_id") @db.Uuid
+  postingId    String   @map("posting_id") @db.Uuid
+  fromBucket   String?  @map("from_bucket") @db.VarChar(20)
+  toBucket     String   @map("to_bucket") @db.VarChar(20)
+  warehouseId  String?  @map("warehouse_id") @db.Uuid
+  binId        String?  @map("bin_id") @db.Uuid
+  partyId      String?  @map("party_id") @db.Uuid
+  refType      String   @map("ref_type") @db.VarChar(30)
+  refId        String   @map("ref_id") @db.Uuid
+  refNumber    String?  @map("ref_number") @db.VarChar(60)
+  occurredAt   DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  unit    SerialUnit   @relation(fields: [serialUnitId], references: [id])
+  posting StockPosting @relation(fields: [postingId], references: [id])
+
+  @@index([tenantId, serialUnitId, occurredAt])
+  @@map("serial_events")
+}
+
+model InventoryAdjustment {
+  id           String    @id @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  number       String    @db.VarChar(40)
+  warehouseId  String    @map("warehouse_id") @db.Uuid
+  reasonCode   String    @map("reason_code") @db.VarChar(20)
+  notes        String?   @db.VarChar(500)
+  status       String    @db.VarChar(20)
+  statusReason String?   @map("status_reason") @db.VarChar(300)
+  /// Absolute value of the adjustment (sum |qty * cost|) used for the approval threshold.
+  totalValue   Decimal   @default(0) @map("total_value") @db.Decimal(18, 2)
+  postingIds   String[]  @map("posting_ids") @db.Uuid
+  createdBy    String    @map("created_by") @db.Uuid
+  submittedBy  String?   @map("submitted_by") @db.Uuid
+  approvedBy   String?   @map("approved_by") @db.Uuid
+  postedAt     DateTime? @map("posted_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  version      Int       @default(0)
+
+  lines InventoryAdjustmentLine[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, status, createdAt])
+  @@map("inventory_adjustments")
+}
+
+model InventoryAdjustmentLine {
+  id            String   @id @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  adjustmentId  String   @map("adjustment_id") @db.Uuid
+  lineNo        Int      @map("line_no")
+  itemId        String   @map("item_id") @db.Uuid
+  binId         String?  @map("bin_id") @db.Uuid
+  bucket        String   @db.VarChar(20)
+  qtyDelta      Decimal  @map("qty_delta") @db.Decimal(18, 3)
+  unitCost      Decimal? @map("unit_cost") @db.Decimal(18, 4)
+  serialNumbers String[] @map("serial_numbers")
+
+  adjustment InventoryAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+
+  @@unique([adjustmentId, lineNo])
+  @@map("inventory_adjustment_lines")
+}
+
+/// Weighted average cost per item per warehouse (ADR-0008).
+model ItemCost {
+  tenantId    String  @map("tenant_id") @db.Uuid
+  itemId      String  @map("item_id") @db.Uuid
+  warehouseId String  @map("warehouse_id") @db.Uuid
+  avgCost     Decimal @map("avg_cost") @db.Decimal(18, 4)
+  qtyBasis    Decimal @map("qty_basis") @db.Decimal(18, 3)
+
+  @@id([tenantId, itemId, warehouseId])
+  @@map("item_cost")
+}
+
+model InventorySettings {
+  tenantId                    String   @id @map("tenant_id") @db.Uuid
+  adjustmentApprovalThreshold Decimal  @default(25000) @map("adjustment_approval_threshold") @db.Decimal(18, 2)
+  updatedAt                   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("inventory_settings")
+}
+
+model DocumentSequence {
+  tenantId String @map("tenant_id") @db.Uuid
+  docType  String @map("doc_type") @db.VarChar(10)
+  fy       String @db.VarChar(10)
+  lastNo   Int    @default(0) @map("last_no")
+
+  @@id([tenantId, docType, fy])
+  @@map("document_sequences")
+}
+
+/* ---- standard tables ------------------------------------------------------ */
+
+model IdempotencyKey {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  scope        String
+  key          String   @db.Uuid
+  requestHash  String   @map("request_hash") @db.Char(64)
+  status       String   @default("IN_PROGRESS") @db.VarChar(20)
+  responseCode Int?     @map("response_code")
+  responseBody Json?    @map("response_body")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@id([tenantId, scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+model OutboxEvent {
+  id            String    @id @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  eventType     String    @map("event_type")
+  eventVersion  Int       @map("event_version")
+  aggregateType String    @map("aggregate_type")
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  envelope      Json
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+
+  @@map("outbox_events")
+}
+
+model ProcessedEvent {
+  consumer    String
+  eventId     String   @map("event_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([consumer, eventId])
+  @@map("processed_events")
+}

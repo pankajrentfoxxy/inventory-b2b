@@ -82,6 +82,8 @@ export interface PoDetail {
   orderDate: string;
   expectedDeliveryDate: string | null;
   status: PurchaseOrderStatus;
+  /** Optimistic concurrency token; echoed on PUT so a stale edit gets a 409 instead of overwriting. */
+  version: number;
   receiveState: ReceiveState;
   orderedQuantity: number;
   receivedQuantity: number;

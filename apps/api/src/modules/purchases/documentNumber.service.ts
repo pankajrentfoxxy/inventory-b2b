@@ -15,11 +15,13 @@ function defaultsFor(docType: DocumentType) {
 
 export async function ensureSequence(db: Db, organizationId: string, docType: DocumentType) {
   const d = defaultsFor(docType);
-  return db.documentSequence.upsert({
-    where: { organizationId_docType: { organizationId, docType } },
-    update: {},
-    create: { organizationId, docType, prefix: d.prefix, padding: d.padding, nextNumber: 1 },
-  });
+  // INSERT ... ON CONFLICT DO NOTHING is race-free; a find-then-create upsert is not, and the
+  // first N concurrent creates for a new organization all arrive here together (Phase 0, R3).
+  await db.$executeRaw`
+    INSERT INTO "document_sequences" ("id", "organization_id", "doc_type", "prefix", "next_number", "padding", "updated_at")
+    VALUES (gen_random_uuid(), ${organizationId}::uuid, ${docType}::"DocumentType", ${d.prefix}, 1, ${d.padding}, now())
+    ON CONFLICT ("organization_id", "doc_type") DO NOTHING`;
+  return db.documentSequence.findUniqueOrThrow({ where: { organizationId_docType: { organizationId, docType } } });
 }
 
 export async function getSequence(organizationId: string, docType: DocumentType) {

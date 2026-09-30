@@ -1,0 +1,56 @@
+{
+  "name": "@b2b/svc-auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "cross-env NODE_ENV=test node --import tsx --test --test-concurrency=1 \"test/**/*.test.ts\"",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "admin:create": "tsx scripts/create-platform-admin.ts",
+    "migrate:legacy": "tsx scripts/migrate-legacy.ts"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@b2b/contracts": "*",
+    "@b2b/platform-kit": "*",
+    "@b2b/shared": "*",
+    "@prisma/client": "^6.16.3",
+    "argon2": "^0.41.1",
+    "bcryptjs": "^3.0.2",
+    "cookie-parser": "^1.4.7",
+    "express": "^4.21.2",
+    "otplib": "^12.0.1",
+    "pino": "^9.14.0",
+    "zod": "^3.25.76",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@b2b/test-kit": "*",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.8",
+    "@types/express": "^4.17.23",
+    "@types/node": "^22.18.0",
+    "@types/supertest": "^6.0.3",
+    "cross-env": "^7.0.3",
+    "pino-pretty": "^13.1.1",
+    "prisma": "^6.16.3",
+    "supertest": "^7.1.4",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "@types/pg": "^8.15.5"
+  },
+  "exports": {
+    "./service": "./src/service.ts",
+    "./config": "./src/config.ts"
+  }
+}

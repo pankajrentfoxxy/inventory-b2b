@@ -1,0 +1,75 @@
+// svc-notification: templates live in code; every attempted delivery is logged here.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("MIGRATE_DATABASE_URL")
+}
+
+model Delivery {
+  id            String   @id @db.Uuid
+  /// Source event id: one delivery per event.
+  eventId       String   @unique @map("event_id") @db.Uuid
+  tenantId      String?  @map("tenant_id") @db.Uuid
+  channel       String   @default("EMAIL") @db.VarChar(10)
+  recipient     String   @db.VarChar(254)
+  template      String   @db.VarChar(60)
+  subject       String   @db.VarChar(200)
+  bodyText      String   @map("body_text")
+  /// SENT | FAILED | SKIPPED
+  status        String   @db.VarChar(10)
+  error         String?  @db.VarChar(500)
+  correlationId String   @map("correlation_id") @db.VarChar(128)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([recipient, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("deliveries")
+}
+
+model IdempotencyKey {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  scope        String
+  key          String   @db.Uuid
+  requestHash  String   @map("request_hash") @db.Char(64)
+  status       String   @default("IN_PROGRESS") @db.VarChar(20)
+  responseCode Int?     @map("response_code")
+  responseBody Json?    @map("response_body")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@id([tenantId, scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+model OutboxEvent {
+  id            String    @id @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  eventType     String    @map("event_type")
+  eventVersion  Int       @map("event_version")
+  aggregateType String    @map("aggregate_type")
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  envelope      Json
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+
+  @@map("outbox_events")
+}
+
+model ProcessedEvent {
+  consumer    String
+  eventId     String   @map("event_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([consumer, eventId])
+  @@map("processed_events")
+}

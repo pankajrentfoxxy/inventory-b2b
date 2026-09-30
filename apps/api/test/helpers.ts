@@ -22,6 +22,9 @@ export async function resetDatabase() {
   await prisma.$executeRawUnsafe(
     'TRUNCATE TABLE "organizations", "users", "permissions", "currencies" RESTART IDENTITY CASCADE',
   );
+  // Platform plumbing tables carry no foreign keys to organizations on purpose (they move into
+  // each service database unchanged), so the cascade above does not reach them.
+  await prisma.$executeRawUnsafe('TRUNCATE TABLE "idempotency_keys", "outbox_events", "processed_events"');
 }
 
 export interface Session {

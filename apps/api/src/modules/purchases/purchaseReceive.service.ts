@@ -1,15 +1,15 @@
 import { Prisma } from '@prisma/client';
 import { PURCHASE_ORDER_RECEIVABLE_STATUSES, type PurchaseReceiveListQuery, type PurchaseReceivePayload } from '@b2b/shared';
-import { prisma } from '../../lib/prisma.js';
-import { conflict, notFound, validationError } from '../../lib/errors.js';
+import { LOCKING_TX_OPTIONS, prisma } from '../../lib/prisma.js';
+import { businessRuleError, conflict, notFound, validationError, type ErrorDetail } from '../../lib/errors.js';
 import type { RequestContext } from '../../middleware/auth.js';
 import { allocateDocumentNumber, claimManualDocumentNumber, getSequence } from './documentNumber.service.js';
-import { findLivePoOrThrow } from './purchaseOrder.repository.js';
+import { lockPurchaseOrder, lockPurchaseOrderLines } from './purchaseOrder.repository.js';
 import { recordPoActivity } from './purchaseOrder.audit.js';
 import { recomputeReceiveStatus } from './purchaseOrder.service.js';
 import { day, n0 } from './purchaseOrder.serializer.js';
 
-type Ctx = Pick<RequestContext, 'userId' | 'userName' | 'organizationId'>;
+type Ctx = Pick<RequestContext, 'userId' | 'userName' | 'organizationId' | 'correlationId'>;
 const toDate = (s: string) => new Date(`${s}T00:00:00.000Z`);
 const q3 = (v: number) => Math.round(v * 1000) / 1000;
 
@@ -53,9 +53,11 @@ export function serializeReceive(r: ReceiveRecord) {
   };
 }
 
+const RECEIVE_NOT_FOUND = () => notFound('Purchase receive not found', 'PURCHASE_RECEIVE_NOT_FOUND');
+
 async function findReceiveOrThrow(organizationId: string, id: string) {
   const r = await prisma.purchaseReceive.findFirst({ where: { id, organizationId }, include: receiveInclude });
-  if (!r) throw notFound('Purchase receive not found', 'PURCHASE_RECEIVE_NOT_FOUND');
+  if (!r) throw RECEIVE_NOT_FOUND();
   return r;
 }
 
@@ -102,31 +104,57 @@ export async function previewNextNumber(organizationId: string) {
   return getSequence(organizationId, 'PURCHASE_RECEIVE');
 }
 
-export async function createReceive(ctx: Ctx, p: PurchaseReceivePayload) {
+/**
+ * Records a goods receipt. Everything runs in ONE transaction under a row lock on the purchase
+ * order (Phase 0 R1/R6/R7):
+ *
+ *   lock PO FOR UPDATE -> assert receivable -> lock lines FOR UPDATE (by id) ->
+ *   assert received + qty <= ordered per line -> allocate number -> insert GRN + lines ->
+ *   conditional UPDATE of received_quantity -> recompute PO status, version + 1 ->
+ *   activity row + audit.recorded outbox event
+ *
+ * `idempotencyKey` comes from the Idempotency-Key header (R2) and is stored on the GRN, where a
+ * unique index per organization is the last guard against duplicates.
+ */
+export async function createReceive(ctx: Ctx, p: PurchaseReceivePayload, idempotencyKey: string | null) {
   const { organizationId } = ctx;
-  const po = await findLivePoOrThrow(prisma, organizationId, p.purchaseOrderId, { lines: true });
-  if (!PURCHASE_ORDER_RECEIVABLE_STATUSES.includes(po.status)) {
-    throw conflict(`Goods can only be received against issued or partially received orders (this one is ${po.status.toLowerCase().replace('_', ' ')})`, 'PO_NOT_RECEIVABLE');
-  }
-  const poLines = new Map(po.lines.map((l) => [l.id, l]));
-  const problems = p.lines.flatMap((l, i) => {
-    const line = poLines.get(l.purchaseOrderLineId);
-    if (!line) return [{ path: `lines.${i}.purchaseOrderLineId`, message: 'Line does not belong to this purchase order' }];
-    const remaining = q3(n0(line.quantity) - n0(line.receivedQuantity));
-    if (l.quantity > remaining + 1e-9) return [{ path: `lines.${i}.quantity`, message: `Only ${remaining} ${line.unit ?? ''} of "${line.name}" remain to be received`.replace(/\s+/g, ' ') }];
-    return [];
-  });
+
+  const duplicates: ErrorDetail[] = [];
   const seen = new Set<string>();
   for (const l of p.lines) {
-    if (seen.has(l.purchaseOrderLineId)) problems.push({ path: 'lines', message: 'Each purchase order line may appear only once' });
+    if (seen.has(l.purchaseOrderLineId)) duplicates.push({ path: 'lines', message: 'Each purchase order line may appear only once' });
     seen.add(l.purchaseOrderLineId);
   }
-  if (problems.length) throw validationError(problems);
+  if (duplicates.length) throw validationError(duplicates);
 
   const active = p.lines.filter((l) => l.quantity > 0);
   const totalQuantity = q3(active.reduce((s, l) => s + l.quantity, 0));
 
   const id = await prisma.$transaction(async (tx) => {
+    const po = await lockPurchaseOrder(tx, organizationId, p.purchaseOrderId);
+    if (!PURCHASE_ORDER_RECEIVABLE_STATUSES.includes(po.status)) {
+      throw conflict(`Goods can only be received against issued or partially received orders (this one is ${po.status.toLowerCase().replace('_', ' ')})`, 'PO_NOT_RECEIVABLE');
+    }
+    const poLines = new Map((await lockPurchaseOrderLines(tx, po.id)).map((l) => [l.id, l]));
+
+    const problems: ErrorDetail[] = [];
+    let overReceipt = false;
+    p.lines.forEach((l, i) => {
+      const line = poLines.get(l.purchaseOrderLineId);
+      if (!line) {
+        problems.push({ path: `lines.${i}.purchaseOrderLineId`, message: 'Line does not belong to this purchase order' });
+        return;
+      }
+      const remaining = q3(line.quantity - line.receivedQuantity);
+      if (l.quantity > remaining + 1e-9) {
+        overReceipt = true;
+        problems.push({ path: `lines.${i}.quantity`, message: `Only ${remaining}${line.unit ? ` ${line.unit}` : ''} of "${line.name}" remain to be received` });
+      }
+    });
+    if (problems.length) {
+      throw overReceipt ? businessRuleError('OVER_RECEIPT', 'Some quantities exceed what remains to be received', problems) : validationError(problems);
+    }
+
     const number = p.receiveNumber
       ? await claimManualDocumentNumber(tx, organizationId, 'PURCHASE_RECEIVE', p.receiveNumber)
       : await allocateDocumentNumber(tx, organizationId, 'PURCHASE_RECEIVE');
@@ -140,45 +168,81 @@ export async function createReceive(ctx: Ctx, p: PurchaseReceivePayload) {
         receivedDate: toDate(p.receivedDate),
         notes: p.notes,
         totalQuantity,
+        idempotencyKey,
         createdById: ctx.userId,
         createdByName: ctx.userName,
         lines: { create: active.map((l) => ({ organizationId, purchaseOrderLineId: l.purchaseOrderLineId, itemId: poLines.get(l.purchaseOrderLineId)!.itemId, quantity: l.quantity })) },
       },
     });
     for (const l of active) {
-      await tx.purchaseOrderLine.update({ where: { id: l.purchaseOrderLineId }, data: { receivedQuantity: { increment: l.quantity } } });
+      // Conditional update: the CHECK constraint is the final net, this keeps the error a clean 422.
+      const updated = await tx.$executeRaw`
+        UPDATE "purchase_order_lines"
+           SET "received_quantity" = "received_quantity" + ${l.quantity}::numeric, "updated_at" = now()
+         WHERE "id" = ${l.purchaseOrderLineId}::uuid
+           AND "received_quantity" + ${l.quantity}::numeric <= "quantity"`;
+      if (updated !== 1) throw businessRuleError('OVER_RECEIPT', 'Some quantities exceed what remains to be received');
     }
-    const status = await recomputeReceiveStatus(tx, po.id);
+    const { status, version } = await recomputeReceiveStatus(tx, po.id, { bumpVersion: true, updatedById: ctx.userId });
     await recordPoActivity(tx, ctx, po.id, {
       action: 'RECEIVE_CREATED',
       entityType: 'RECEIVE',
       entityId: created.id,
       summary: `Received ${totalQuantity} units on ${number}`,
-      newValue: { receiveNumber: number, totalQuantity, status, lines: active.map((l) => ({ item: poLines.get(l.purchaseOrderLineId)!.name, quantity: l.quantity })) },
+      newValue: { receiveNumber: number, totalQuantity, status, purchaseOrderVersion: version, lines: active.map((l) => ({ item: poLines.get(l.purchaseOrderLineId)!.name, quantity: l.quantity })) },
     });
     return created.id;
-  });
+  }, LOCKING_TX_OPTIONS);
   return getReceive(organizationId, id);
 }
 
-/** Cancelling reverses the received quantities and re-derives the PO status. Records are kept. */
+interface LockedReceive {
+  id: string;
+  status: 'RECEIVED' | 'CANCELLED';
+  purchaseOrderId: string;
+  receiveNumber: string;
+  totalQuantity: number;
+}
+
+/**
+ * Cancelling reverses the received quantities and re-derives the PO status. Records are kept.
+ * The GRN row is locked and its status re-checked inside the transaction, so two concurrent
+ * cancels cannot both reverse the quantities (Phase 0 R7 / audit finding 2).
+ */
 export async function cancelReceive(ctx: Ctx, id: string, reason: string | null) {
-  const r = await findReceiveOrThrow(ctx.organizationId, id);
-  if (r.status === 'CANCELLED') throw conflict('This purchase receive is already cancelled', 'RECEIVE_ALREADY_CANCELLED');
+  const { organizationId } = ctx;
   await prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<LockedReceive[]>`
+      SELECT "id", "status", "purchase_order_id" AS "purchaseOrderId", "receive_number" AS "receiveNumber", "total_quantity"::float8 AS "totalQuantity"
+      FROM "purchase_receives"
+      WHERE "id" = ${id}::uuid AND "organization_id" = ${organizationId}::uuid
+      FOR UPDATE`;
+    const r = rows[0];
+    if (!r) throw RECEIVE_NOT_FOUND();
+    if (r.status === 'CANCELLED') throw conflict('This purchase receive is already cancelled', 'RECEIVE_ALREADY_CANCELLED');
+
+    await lockPurchaseOrder(tx, organizationId, r.purchaseOrderId);
+    const lines = await tx.purchaseReceiveLine.findMany({ where: { purchaseReceiveId: id }, select: { purchaseOrderLineId: true, quantity: true } });
+
     await tx.purchaseReceive.update({ where: { id }, data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: reason } });
-    for (const l of r.lines) {
-      await tx.purchaseOrderLine.update({ where: { id: l.purchaseOrderLineId }, data: { receivedQuantity: { decrement: l.quantity } } });
+    for (const l of lines) {
+      const qty = Number(l.quantity);
+      const updated = await tx.$executeRaw`
+        UPDATE "purchase_order_lines"
+           SET "received_quantity" = "received_quantity" - ${qty}::numeric, "updated_at" = now()
+         WHERE "id" = ${l.purchaseOrderLineId}::uuid
+           AND "received_quantity" - ${qty}::numeric >= 0`;
+      if (updated !== 1) throw conflict('Received quantities are inconsistent; this receive cannot be reversed', 'RECEIVE_REVERSAL_CONFLICT');
     }
-    const status = await recomputeReceiveStatus(tx, r.purchaseOrderId);
+    const { status, version } = await recomputeReceiveStatus(tx, r.purchaseOrderId, { bumpVersion: true, updatedById: ctx.userId });
     await recordPoActivity(tx, ctx, r.purchaseOrderId, {
       action: 'RECEIVE_CANCELLED',
       entityType: 'RECEIVE',
       entityId: id,
       summary: `Cancelled ${r.receiveNumber}${reason ? `: ${reason}` : ''}`,
-      oldValue: { receiveNumber: r.receiveNumber, totalQuantity: n0(r.totalQuantity) },
-      newValue: { status, reason },
+      oldValue: { receiveNumber: r.receiveNumber, totalQuantity: r.totalQuantity },
+      newValue: { status, reason, purchaseOrderVersion: version },
     });
-  });
-  return getReceive(ctx.organizationId, id);
+  }, LOCKING_TX_OPTIONS);
+  return getReceive(organizationId, id);
 }

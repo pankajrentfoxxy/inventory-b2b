@@ -21,7 +21,8 @@
     "react-hook-form": "^7.63.0",
     "react-hot-toast": "^2.6.0",
     "react-router-dom": "^6.30.1",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "@b2b/contracts": "*"
   },
   "devDependencies": {
     "@types/react": "^18.3.24",

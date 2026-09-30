@@ -31,7 +31,10 @@ function useInvalidateReceives() {
 
 export function useCreatePurchaseReceive() {
   const invalidate = useInvalidateReceives();
-  return useMutation({ mutationFn: (payload: PurchaseReceivePayload) => receiveApi.create(payload), onSuccess: invalidate });
+  return useMutation({
+    mutationFn: ({ payload, idempotencyKey }: { payload: PurchaseReceivePayload; idempotencyKey: string }) => receiveApi.create(payload, idempotencyKey),
+    onSuccess: invalidate,
+  });
 }
 export function useCancelPurchaseReceive() {
   const invalidate = useInvalidateReceives();

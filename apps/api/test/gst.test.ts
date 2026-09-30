@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import request from 'supertest';
+import { createApp } from '../src/app.js';
 import { mapZohoGstinRecord } from '../src/modules/integrations/gst.service.js';
+import { VALID_GSTIN } from './helpers.js';
 
 const sample = {
   taxpayer_type: 'Regular',
@@ -47,5 +50,26 @@ describe('Zoho GSTIN record mapping', () => {
   it('falls back to the GSTIN state code when the state name is unknown', () => {
     const r = mapZohoGstinRecord({ ...sample, pradr: { addr: { stcd: 'Unknown Land' } }, adadr: [] }, '06AAHCT0310N1ZG');
     assert.equal(r.addresses[0].stateCode, '06');
+  });
+});
+
+describe('public GSTIN lookup (application form prefill)', () => {
+  const app = createApp();
+
+  it('needs no token, validates the GSTIN, and reports an unconfigured provider honestly', async () => {
+    const bad = await request(app).get('/api/public/gst/lookup').query({ gstin: 'NOT-A-GSTIN' });
+    assert.equal(bad.status, 422, 'malformed GSTINs never reach the provider');
+    assert.equal(bad.body.success, false);
+    assert.equal(bad.body.error.details[0].path, 'gstin');
+
+    const none = await request(app).get('/api/public/gst/lookup').query({ gstin: VALID_GSTIN });
+    assert.equal(none.status, 501, 'GST_PROVIDER=none in the test environment');
+    assert.equal(none.body.error.code, 'GST_LOOKUP_NOT_CONFIGURED');
+    assert.ok(none.headers['ratelimit-policy'] || none.headers['ratelimit'], 'rate limit headers advertised');
+  });
+
+  it('keeps the tenant-scoped lookup behind authentication', async () => {
+    const res = await request(app).get('/api/integrations/gst/lookup').query({ gstin: VALID_GSTIN });
+    assert.equal(res.status, 401);
   });
 });

@@ -1,0 +1,66 @@
+{
+  "rabbit_version": "3.13.0",
+  "users": [
+    {
+      "name": "b2b",
+      "password": "b2b_dev",
+      "tags": ["administrator"]
+    }
+  ],
+  "vhosts": [{ "name": "/" }],
+  "permissions": [{ "user": "b2b", "vhost": "/", "configure": ".*", "write": ".*", "read": ".*" }],
+  "policies": [
+    {
+      "vhost": "/",
+      "name": "dlq-alert-threshold",
+      "pattern": "\\.dlq$",
+      "apply-to": "queues",
+      "definition": { "max-length": 100000, "overflow": "reject-publish" },
+      "priority": 0
+    }
+  ],
+  "exchanges": [
+    { "name": "domain.events", "vhost": "/", "type": "topic", "durable": true, "auto_delete": false, "arguments": {} },
+    { "name": "domain.events.retry", "vhost": "/", "type": "direct", "durable": true, "auto_delete": false, "arguments": {} },
+    { "name": "domain.events.dlx", "vhost": "/", "type": "direct", "durable": true, "auto_delete": false, "arguments": {} }
+  ],
+  "queues": [
+    {
+      "name": "audit.recorded",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": { "x-queue-type": "quorum", "x-dead-letter-exchange": "domain.events.dlx", "x-dead-letter-routing-key": "audit.recorded" }
+    },
+    { "name": "audit.recorded.retry.10s", "vhost": "/", "durable": true, "auto_delete": false,
+      "arguments": { "x-message-ttl": 10000, "x-dead-letter-exchange": "domain.events", "x-dead-letter-routing-key": "audit.recorded.v1" } },
+    { "name": "audit.recorded.retry.60s", "vhost": "/", "durable": true, "auto_delete": false,
+      "arguments": { "x-message-ttl": 60000, "x-dead-letter-exchange": "domain.events", "x-dead-letter-routing-key": "audit.recorded.v1" } },
+    { "name": "audit.recorded.retry.10m", "vhost": "/", "durable": true, "auto_delete": false,
+      "arguments": { "x-message-ttl": 600000, "x-dead-letter-exchange": "domain.events", "x-dead-letter-routing-key": "audit.recorded.v1" } },
+    { "name": "audit.recorded.dlq", "vhost": "/", "durable": true, "auto_delete": false, "arguments": { "x-queue-type": "quorum" } },
+
+    {
+      "name": "platform.event-archive",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": { "x-queue-type": "quorum", "x-dead-letter-exchange": "domain.events.dlx", "x-dead-letter-routing-key": "platform.event-archive" }
+    },
+    { "name": "platform.event-archive.dlq", "vhost": "/", "durable": true, "auto_delete": false, "arguments": { "x-queue-type": "quorum" } },
+
+    { "name": "platform.heartbeat", "vhost": "/", "durable": true, "auto_delete": false, "arguments": {} }
+  ],
+  "bindings": [
+    { "source": "domain.events", "vhost": "/", "destination": "audit.recorded", "destination_type": "queue", "routing_key": "audit.recorded.v1", "arguments": {} },
+    { "source": "domain.events", "vhost": "/", "destination": "platform.event-archive", "destination_type": "queue", "routing_key": "#", "arguments": {} },
+    { "source": "domain.events", "vhost": "/", "destination": "platform.heartbeat", "destination_type": "queue", "routing_key": "platform.heartbeat.v1", "arguments": {} },
+
+    { "source": "domain.events.retry", "vhost": "/", "destination": "audit.recorded.retry.10s", "destination_type": "queue", "routing_key": "audit.recorded.retry.10s", "arguments": {} },
+    { "source": "domain.events.retry", "vhost": "/", "destination": "audit.recorded.retry.60s", "destination_type": "queue", "routing_key": "audit.recorded.retry.60s", "arguments": {} },
+    { "source": "domain.events.retry", "vhost": "/", "destination": "audit.recorded.retry.10m", "destination_type": "queue", "routing_key": "audit.recorded.retry.10m", "arguments": {} },
+
+    { "source": "domain.events.dlx", "vhost": "/", "destination": "audit.recorded.dlq", "destination_type": "queue", "routing_key": "audit.recorded", "arguments": {} },
+    { "source": "domain.events.dlx", "vhost": "/", "destination": "platform.event-archive.dlq", "destination_type": "queue", "routing_key": "platform.event-archive", "arguments": {} }
+  ]
+}

@@ -1,0 +1,175 @@
+// svc-qc (phase-05): QC lots created from posted receipts, inspection results, decisions that
+// drive QC_PASS / QC_FAIL postings in svc-inventory. Every table is tenant-owned and under RLS.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("MIGRATE_DATABASE_URL")
+}
+
+model QcChecklist {
+  id        String   @id @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(100)
+  /// { itemIds: string[], categoryIds: string[], isDefault: boolean }
+  appliesTo Json     @map("applies_to")
+  version   Int      @default(1)
+  status    String   @default("ACTIVE") @db.VarChar(10)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  items QcChecklistItem[]
+
+  @@index([tenantId])
+  @@map("qc_checklists")
+}
+
+model QcChecklistItem {
+  id          String   @id @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  checklistId String   @map("checklist_id") @db.Uuid
+  seq         Int
+  label       String   @db.VarChar(200)
+  /// PASS_FAIL | NUMERIC | TEXT | PHOTO
+  kind        String   @db.VarChar(10)
+  critical    Boolean  @default(false)
+  minValue    Decimal? @map("min_value") @db.Decimal(18, 4)
+  maxValue    Decimal? @map("max_value") @db.Decimal(18, 4)
+
+  checklist QcChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@unique([checklistId, seq])
+  @@map("qc_checklist_items")
+}
+
+model QcLot {
+  id               String    @id @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  number           String    @db.VarChar(40)
+  /// GRN | CUSTOMER_RETURN | TRANSFER_IN | RTO
+  sourceType       String    @map("source_type") @db.VarChar(20)
+  sourceId         String    @map("source_id") @db.Uuid
+  sourceLineId     String    @map("source_line_id") @db.Uuid
+  sourceNumber     String?   @map("source_number") @db.VarChar(60)
+  itemId           String    @map("item_id") @db.Uuid
+  itemSnapshot     Json      @map("item_snapshot")
+  warehouseId      String    @map("warehouse_id") @db.Uuid
+  binId            String?   @map("bin_id") @db.Uuid
+  /// QUANTITY | SERIAL
+  mode             String    @db.VarChar(10)
+  qty              Decimal   @db.Decimal(18, 3)
+  passQty          Decimal   @default(0) @map("pass_qty") @db.Decimal(18, 3)
+  failQty          Decimal   @default(0) @map("fail_qty") @db.Decimal(18, 3)
+  serials          String[]  @default([])
+  checklistId      String?   @map("checklist_id") @db.Uuid
+  checklistVersion Int?      @map("checklist_version")
+  /// OPEN | IN_INSPECTION | DECIDED | CLOSED | CANCELLED
+  status           String    @db.VarChar(20)
+  statusReason     String?   @map("status_reason") @db.VarChar(300)
+  inspectorId      String?   @map("inspector_id") @db.Uuid
+  startedAt        DateTime? @map("started_at") @db.Timestamptz(6)
+  decidedAt        DateTime? @map("decided_at") @db.Timestamptz(6)
+  decidedBy        String?   @map("decided_by") @db.Uuid
+  postingIds       String[]  @default([]) @map("posting_ids") @db.Uuid
+  closedAt         DateTime? @map("closed_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  version          Int       @default(0)
+
+  results QcUnitResult[]
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, sourceType, sourceLineId])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, sourceId])
+  @@map("qc_lots")
+}
+
+model QcUnitResult {
+  id               String   @id @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  lotId            String   @map("lot_id") @db.Uuid
+  /// Serial mode: the serial; quantity mode: sample label (e.g. "sample-1")
+  serialNo         String   @map("serial_no") @db.VarChar(80)
+  /// PASS | FAIL
+  result           String   @db.VarChar(4)
+  gradeCode        String?  @map("grade_code") @db.VarChar(20)
+  defectCodes      String[] @default([]) @map("defect_codes")
+  remarks          String?  @db.VarChar(500)
+  checklistAnswers Json     @default("{}") @map("checklist_answers")
+  inspectedBy      String   @map("inspected_by") @db.Uuid
+  inspectedAt      DateTime @default(now()) @map("inspected_at") @db.Timestamptz(6)
+
+  lot QcLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  @@unique([lotId, serialNo])
+  @@map("qc_unit_results")
+}
+
+model QcDefectCode {
+  tenantId    String @map("tenant_id") @db.Uuid
+  code        String @db.VarChar(20)
+  description String @db.VarChar(200)
+  status      String @default("ACTIVE") @db.VarChar(10)
+
+  @@id([tenantId, code])
+  @@map("qc_defect_codes")
+}
+
+model DocumentSequence {
+  tenantId String @map("tenant_id") @db.Uuid
+  docType  String @map("doc_type") @db.VarChar(10)
+  fy       String @db.VarChar(10)
+  lastNo   Int    @default(0) @map("last_no")
+
+  @@id([tenantId, docType, fy])
+  @@map("document_sequences")
+}
+
+/* ---- standard tables ------------------------------------------------------ */
+
+model IdempotencyKey {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  scope        String
+  key          String   @db.Uuid
+  requestHash  String   @map("request_hash") @db.Char(64)
+  status       String   @default("IN_PROGRESS") @db.VarChar(20)
+  responseCode Int?     @map("response_code")
+  responseBody Json?    @map("response_body")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@id([tenantId, scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+model OutboxEvent {
+  id            String    @id @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  eventType     String    @map("event_type")
+  eventVersion  Int       @map("event_version")
+  aggregateType String    @map("aggregate_type")
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  envelope      Json
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+
+  @@map("outbox_events")
+}
+
+model ProcessedEvent {
+  consumer    String
+  eventId     String   @map("event_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([consumer, eventId])
+  @@map("processed_events")
+}

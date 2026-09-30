@@ -5,12 +5,15 @@ import compression from 'compression';
 import pinoHttp from 'pino-http';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
+import { CORRELATION_HEADER, correlationId } from './middleware/correlation.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { IDEMPOTENCY_HEADER, IDEMPOTENCY_REPLAY_HEADER } from './lib/idempotency.js';
+import { createHealthRouter } from './modules/health/health.routes.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { organizationRouter } from './modules/organizations/organization.routes.js';
 import { vendorRouter } from './modules/vendors/vendor.routes.js';
 import { settingsRouter } from './modules/settings/settings.routes.js';
-import { integrationsRouter } from './modules/integrations/integrations.routes.js';
+import { integrationsRouter, publicIntegrationsRouter } from './modules/integrations/integrations.routes.js';
 import { itemRouter } from './modules/items/item.routes.js';
 import { purchaseOrderRouter } from './modules/purchases/purchaseOrder.routes.js';
 import { purchaseReceiveRouter } from './modules/purchases/purchaseReceive.routes.js';
@@ -20,6 +23,8 @@ export function createApp() {
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
 
+  // First: strip identity headers and establish the correlation id for everything downstream.
+  app.use(correlationId);
   app.use(helmet());
   app.use(
     cors({
@@ -28,16 +33,25 @@ export function createApp() {
         cb(new Error(`Origin ${origin} is not allowed`));
       },
       credentials: true,
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Organization-Id'],
-      exposedHeaders: ['Content-Disposition'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Organization-Id', 'Idempotency-Key', 'X-Correlation-Id'],
+      exposedHeaders: ['Content-Disposition', 'X-Correlation-Id', 'Idempotent-Replayed'],
     }),
   );
   app.use(compression());
   app.use(express.json({ limit: '1mb' }));
   if (!env.isTest) {
-    app.use(pinoHttp({ logger, autoLogging: { ignore: (req) => req.url === '/api/health' } }));
+    app.use(
+      pinoHttp({
+        logger,
+        autoLogging: { ignore: (req) => req.url === '/api/health' || req.url.startsWith('/health') },
+        customProps: (req) => ({ correlationId: req.correlationId }),
+        redact: ['req.headers.authorization', 'req.headers.cookie'],
+      }),
+    );
   }
 
+  // Health: /health/live (process up) and /health/ready (dependencies). /api/health stays for old clients.
+  app.use('/health', createHealthRouter());
   app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'b2b-inventory-api', time: new Date().toISOString() }));
 
   app.use('/api/auth', authRouter);
@@ -45,6 +59,7 @@ export function createApp() {
   app.use('/api/vendors', vendorRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/integrations', integrationsRouter);
+  app.use('/api/public', publicIntegrationsRouter);
   app.use('/api/items', itemRouter);
   app.use('/api/purchase-orders', purchaseOrderRouter);
   app.use('/api/purchase-receives', purchaseReceiveRouter);
@@ -53,3 +68,5 @@ export function createApp() {
   app.use(errorHandler);
   return app;
 }
+
+export { CORRELATION_HEADER, IDEMPOTENCY_HEADER, IDEMPOTENCY_REPLAY_HEADER };

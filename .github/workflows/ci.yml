@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'phase-*']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password123
+          POSTGRES_DB: b2b_inventory_test
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:password123@localhost:5433/b2b_inventory_test?schema=public
+      JWT_SECRET: test-secret-not-for-production-0123456789
+      APP_ENCRYPTION_KEY: k1acWUZaeQmRzwxwVc2hTZB9iqAlCkBHvgTQ/svJ7+I=
+      GST_PROVIDER: none
+      LOG_LEVEL: silent
+      CORS_ORIGINS: http://localhost:5173
+      UPLOAD_DIR: ./uploads-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Apply migrations to the test database
+        run: npm run test:setup -w @b2b/api
+      - name: API tests (RBAC, tenant isolation, R1-R7 concurrency, outbox / inbox)
+        run: npm run test -w @b2b/api
+      - name: Gateway tests
+        run: npm run test -w @b2b/gateway
+      - name: Prepare per-service test databases (RLS runtime roles, migrations, grants)
+        run: npx tsx scripts/test-db-setup.mts
+      - name: Service tests (auth, tenant, audit, notification, iam, master, party, inventory, qc, procurement incl. end-to-end)
+        run: npm run test:services
+      - name: Ledger invariant (must return zero rows after the suite)
+        run: |
+          psql "$DATABASE_URL" -tAc "
+            SELECT count(*) FROM purchase_order_lines l
+            LEFT JOIN (SELECT gl.purchase_order_line_id, sum(gl.quantity) q FROM purchase_receive_lines gl
+                       JOIN purchase_receives g ON g.id = gl.purchase_receive_id WHERE g.status <> 'CANCELLED'
+                       GROUP BY gl.purchase_order_line_id) r ON r.purchase_order_line_id = l.id
+            WHERE coalesce(r.q,0) <> l.received_quantity OR l.received_quantity > l.quantity" | tee /tmp/violations
+          test "$(cat /tmp/violations | tr -d '[:space:]')" = "0"
+      - run: npm run build
+
+  infra:
+    name: infra config validates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose config
+        run: docker compose -f infra/docker-compose.yml --profile observability config --quiet
+      - name: RabbitMQ definitions are valid JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('infra/rabbitmq/definitions.json','utf8')); console.log('ok')"
+      - name: Core infra boots and reports healthy
+        run: |
+          docker compose -f infra/docker-compose.yml up -d --wait postgres rabbitmq redis minio
+          docker compose -f infra/docker-compose.yml ps
+          docker compose -f infra/docker-compose.yml exec -T postgres psql -U platform_admin -d postgres -tAc "SELECT datname FROM pg_database WHERE datname LIKE '%_db' ORDER BY 1"
+          docker compose -f infra/docker-compose.yml down -v

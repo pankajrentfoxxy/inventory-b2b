@@ -1,0 +1,165 @@
+// svc-party: suppliers and customers with addresses, contacts, bank accounts (phase-03 3.5).
+// One `parties` table with party_type keeps address/contact logic single-sourced.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("MIGRATE_DATABASE_URL")
+}
+
+model Party {
+  id            String   @id @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  /// SUPPLIER | CUSTOMER
+  partyType     String   @map("party_type") @db.VarChar(10)
+  code          String   @db.VarChar(40)
+  legalName     String   @map("legal_name") @db.VarChar(200)
+  displayName   String   @map("display_name") @db.VarChar(150)
+  /// REGISTERED | UNREGISTERED | COMPOSITION | CONSUMER | OVERSEAS | SEZ
+  gstTreatment  String   @map("gst_treatment") @db.VarChar(15)
+  gstin         String?  @db.Char(15)
+  pan           String?  @db.Char(10)
+  paymentTermId String?  @map("payment_term_id") @db.Uuid
+  creditLimit   Decimal? @map("credit_limit") @db.Decimal(18, 2)
+  creditDays    Int?     @map("credit_days")
+  email         String?  @db.VarChar(254)
+  phone         String?  @db.VarChar(30)
+  website       String?  @db.VarChar(200)
+  /// ACTIVE | INACTIVE | BLOCKED
+  status        String   @default("ACTIVE") @db.VarChar(10)
+  blockedReason String?  @map("blocked_reason") @db.VarChar(500)
+  /// The same business as the opposite party type (supplier <-> customer).
+  linkedPartyId String?  @map("linked_party_id") @db.Uuid
+  remarks       String?
+  customFields  Json     @default("{}") @map("custom_fields")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  version       Int      @default(0)
+
+  addresses    PartyAddress[]
+  contacts     PartyContact[]
+  bankAccounts PartyBankAccount[]
+
+  // UNIQUE (tenant_id, party_type, lower(code)), partial unique GSTIN and CHECKs live in the migration.
+  @@index([tenantId, partyType, status])
+  @@index([tenantId, displayName])
+  @@map("parties")
+}
+
+model PartyAddress {
+  id        String  @id @db.Uuid
+  tenantId  String  @map("tenant_id") @db.Uuid
+  partyId   String  @map("party_id") @db.Uuid
+  /// BILLING | SHIPPING
+  kind      String  @db.VarChar(10)
+  attention String? @db.VarChar(100)
+  line1     String  @db.VarChar(200)
+  line2     String? @db.VarChar(200)
+  city      String  @db.VarChar(100)
+  state     String? @db.VarChar(100)
+  stateCode String  @map("state_code") @db.Char(2)
+  pincode   String  @db.VarChar(10)
+  country   String  @default("IN") @db.Char(2)
+  phone     String? @db.VarChar(30)
+  isDefault Boolean @default(false) @map("is_default")
+
+  party Party @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, partyId])
+  @@map("party_addresses")
+}
+
+model PartyContact {
+  id          String  @id @db.Uuid
+  tenantId    String  @map("tenant_id") @db.Uuid
+  partyId     String  @map("party_id") @db.Uuid
+  name        String  @db.VarChar(150)
+  email       String? @db.VarChar(254)
+  phone       String? @db.VarChar(30)
+  designation String? @db.VarChar(100)
+  isPrimary   Boolean @default(false) @map("is_primary")
+
+  party Party @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, partyId])
+  @@map("party_contacts")
+}
+
+/// Account numbers are encrypted at rest (APP_ENCRYPTION_KEY); lists expose the last four digits only.
+model PartyBankAccount {
+  id               String  @id @db.Uuid
+  tenantId         String  @map("tenant_id") @db.Uuid
+  partyId          String  @map("party_id") @db.Uuid
+  bankName         String  @map("bank_name") @db.VarChar(100)
+  accountHolder    String  @map("account_holder") @db.VarChar(150)
+  accountNumberEnc String  @map("account_number_enc")
+  accountLast4     String  @map("account_last4") @db.VarChar(4)
+  ifsc             String  @db.Char(11)
+  branch           String? @db.VarChar(100)
+  /// SAVINGS | CURRENT | CASH_CREDIT | OVERDRAFT | OTHER
+  accountType      String  @default("CURRENT") @map("account_type") @db.VarChar(15)
+  isPrimary        Boolean @default(false) @map("is_primary")
+
+  party Party @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, partyId])
+  @@map("party_bank_accounts")
+}
+
+model EntityReference {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  entityType   String   @map("entity_type") @db.VarChar(30)
+  entityId     String   @map("entity_id") @db.Uuid
+  referencedBy String   @map("referenced_by") @db.VarChar(30)
+  firstSeenAt  DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+
+  @@id([tenantId, entityType, entityId, referencedBy])
+  @@map("entity_references")
+}
+
+model IdempotencyKey {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  scope        String
+  key          String   @db.Uuid
+  requestHash  String   @map("request_hash") @db.Char(64)
+  status       String   @default("IN_PROGRESS") @db.VarChar(20)
+  responseCode Int?     @map("response_code")
+  responseBody Json?    @map("response_body")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@id([tenantId, scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+model OutboxEvent {
+  id            String    @id @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  eventType     String    @map("event_type")
+  eventVersion  Int       @map("event_version")
+  aggregateType String    @map("aggregate_type")
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  envelope      Json
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+
+  @@map("outbox_events")
+}
+
+model ProcessedEvent {
+  consumer    String
+  eventId     String   @map("event_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([consumer, eventId])
+  @@map("processed_events")
+}

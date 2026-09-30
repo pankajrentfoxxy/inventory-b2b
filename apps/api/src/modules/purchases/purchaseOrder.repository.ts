@@ -1,8 +1,9 @@
 /**
- * Validation and resolution helpers for purchase orders: tenant-scoped lookups, master checks,
- * item / tax snapshots and the delivery-address snapshot.
+ * Validation and resolution helpers for purchase orders: tenant-scoped lookups, row locks,
+ * master checks, item / tax snapshots and the delivery-address snapshot.
  */
-import type { Prisma } from '@prisma/client';
+import type { Prisma, PurchaseOrderStatus } from '@prisma/client';
+import { z } from 'zod';
 import type { PurchaseOrderPayload } from '@b2b/shared';
 import { prisma, type PrismaTx } from '../../lib/prisma.js';
 import { notFound, validationError, type ErrorDetail } from '../../lib/errors.js';
@@ -10,11 +11,70 @@ import { validateCustomValue } from '../vendors/vendor.repository.js';
 
 export type Db = PrismaTx | typeof prisma;
 
+const uuid = z.string().uuid();
+const PO_NOT_FOUND = () => notFound('Purchase order not found', 'PURCHASE_ORDER_NOT_FOUND');
+
 export async function findLivePoOrThrow<I extends Prisma.PurchaseOrderInclude>(db: Db, organizationId: string, id: string, include?: I) {
+  if (!uuid.safeParse(id).success) throw PO_NOT_FOUND();
   const po = await db.purchaseOrder.findFirst({ where: { id, organizationId, deletedAt: null }, include });
-  if (!po) throw notFound('Purchase order not found', 'PURCHASE_ORDER_NOT_FOUND');
+  if (!po) throw PO_NOT_FOUND();
   return po as Prisma.PurchaseOrderGetPayload<{ include: I }>;
 }
+
+/* ---- row locks (Phase 0, R1/R4/R6/R7) ------------------------------------- */
+
+export interface LockedPurchaseOrder {
+  id: string;
+  status: PurchaseOrderStatus;
+  version: number;
+  vendorId: string;
+  purchaseOrderNumber: string;
+  issuedAt: Date | null;
+  locationId: string | null;
+  deliveryLocationId: string | null;
+}
+
+/**
+ * Locks the purchase order row (`FOR UPDATE`) for the rest of the transaction. Every write that
+ * depends on the order's status or quantities (edit, transitions, GRN create / cancel) takes this
+ * lock first, so concurrent writers are serialised and re-check state inside the lock.
+ * A miss (other tenant, deleted, unknown) is a 404, never a 403.
+ */
+export async function lockPurchaseOrder(tx: PrismaTx, organizationId: string, id: string): Promise<LockedPurchaseOrder> {
+  if (!uuid.safeParse(id).success) throw PO_NOT_FOUND();
+  const rows = await tx.$queryRaw<LockedPurchaseOrder[]>`
+    SELECT "id", "status", "version", "vendor_id" AS "vendorId", "po_number" AS "purchaseOrderNumber",
+           "issued_at" AS "issuedAt", "location_id" AS "locationId", "delivery_location_id" AS "deliveryLocationId"
+    FROM "purchase_orders"
+    WHERE "id" = ${id}::uuid AND "organization_id" = ${organizationId}::uuid AND "deleted_at" IS NULL
+    FOR UPDATE`;
+  const po = rows[0];
+  if (!po) throw PO_NOT_FOUND();
+  return po;
+}
+
+export interface LockedPoLine {
+  id: string;
+  lineNumber: number;
+  itemId: string | null;
+  name: string;
+  unit: string | null;
+  quantity: number;
+  receivedQuantity: number;
+}
+
+/** Locks the order's lines in a deterministic order (by id) so concurrent receipts cannot deadlock. */
+export async function lockPurchaseOrderLines(tx: PrismaTx, purchaseOrderId: string): Promise<LockedPoLine[]> {
+  return tx.$queryRaw<LockedPoLine[]>`
+    SELECT "id", "line_number" AS "lineNumber", "item_id" AS "itemId", "name", "unit",
+           "quantity"::float8 AS "quantity", "received_quantity"::float8 AS "receivedQuantity"
+    FROM "purchase_order_lines"
+    WHERE "purchase_order_id" = ${purchaseOrderId}::uuid
+    ORDER BY "id"
+    FOR UPDATE`;
+}
+
+/* ---- resolution ------------------------------------------------------------ */
 
 export interface DeliverySnapshot {
   name: string | null;

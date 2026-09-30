@@ -1,5 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { computePurchaseOrderTotals } from '@b2b/shared';
 import { createApp } from '../src/app.js';
 import { prisma } from '../src/lib/prisma.js';
@@ -305,7 +306,7 @@ describe('purchase orders', () => {
     const preview = await api(app, owner).get('/api/purchase-receives/next-number');
     assert.equal(preview.body.data.preview, 'GRN-00001');
 
-    const res = await api(app, executive).post('/api/purchase-receives').send({
+    const res = await api(app, executive).post('/api/purchase-receives').set('Idempotency-Key', randomUUID()).send({
       purchaseOrderId: issuedId,
       receivedDate: '2026-10-01',
       notes: 'First lot',
@@ -329,12 +330,12 @@ describe('purchase orders', () => {
 
   it('rejects receiving more than the remaining quantity and receiving against drafts', async () => {
     const po = (await api(app, owner).get(`/api/purchase-orders/${issuedId}`)).body.data;
-    const over = await api(app, owner).post('/api/purchase-receives').send({ purchaseOrderId: issuedId, receivedDate: '2026-10-02', lines: [{ purchaseOrderLineId: po.lines[0].id, quantity: 7 }] });
+    const over = await api(app, owner).post('/api/purchase-receives').set('Idempotency-Key', randomUUID()).send({ purchaseOrderId: issuedId, receivedDate: '2026-10-02', lines: [{ purchaseOrderLineId: po.lines[0].id, quantity: 7 }] });
     assert.equal(over.status, 422);
     assert.match(over.body.error.details[0].message, /Only 6/);
 
     const draft = await api(app, owner).post('/api/purchase-orders').send(poPayload());
-    const notIssued = await api(app, owner).post('/api/purchase-receives').send({ purchaseOrderId: draft.body.data.id, receivedDate: '2026-10-02', lines: [{ purchaseOrderLineId: draft.body.data.lines[0].id, quantity: 1 }] });
+    const notIssued = await api(app, owner).post('/api/purchase-receives').set('Idempotency-Key', randomUUID()).send({ purchaseOrderId: draft.body.data.id, receivedDate: '2026-10-02', lines: [{ purchaseOrderLineId: draft.body.data.lines[0].id, quantity: 1 }] });
     assert.equal(notIssued.status, 409);
     assert.equal(notIssued.body.error.code, 'PO_NOT_RECEIVABLE');
     await api(app, owner).delete(`/api/purchase-orders/${draft.body.data.id}`);
@@ -366,7 +367,7 @@ describe('purchase orders', () => {
     assert.equal(blocked.body.error.code, 'PO_HAS_RECEIVES');
 
     const po = (await api(app, owner).get(`/api/purchase-orders/${issuedId}`)).body.data;
-    const rest = await api(app, owner).post('/api/purchase-receives').send({
+    const rest = await api(app, owner).post('/api/purchase-receives').set('Idempotency-Key', randomUUID()).send({
       purchaseOrderId: issuedId,
       receivedDate: '2026-10-03',
       lines: po.lines.map((l: { id: string; remainingQuantity: number }) => ({ purchaseOrderLineId: l.id, quantity: l.remainingQuantity })),
@@ -376,7 +377,7 @@ describe('purchase orders', () => {
     assert.equal(done.status, 'RECEIVED');
     assert.equal(done.receiveState, 'FULL');
 
-    const noMore = await api(app, owner).post('/api/purchase-receives').send({ purchaseOrderId: issuedId, receivedDate: '2026-10-04', lines: [{ purchaseOrderLineId: po.lines[0].id, quantity: 1 }] });
+    const noMore = await api(app, owner).post('/api/purchase-receives').set('Idempotency-Key', randomUUID()).send({ purchaseOrderId: issuedId, receivedDate: '2026-10-04', lines: [{ purchaseOrderLineId: po.lines[0].id, quantity: 1 }] });
     assert.equal(noMore.status, 409);
   });
 

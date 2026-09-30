@@ -11,6 +11,7 @@ import {
   optionalCode,
   optionalDateField,
   optionalEmail,
+  optionalIntegerField,
   optionalNotes,
   optionalText,
   optionalUuid,
@@ -261,6 +262,12 @@ export const purchaseOrderBaseSchema = z.object({
   notes: optionalNotes(2000, 'Notes'),
   terms: optionalNotes(5000, 'Terms'),
   customFields: z.array(purchaseOrderCustomFieldValueSchema).default([]),
+  /**
+   * Optimistic concurrency token (Phase 0, R4). Clients echo the `version` they loaded; when it no
+   * longer matches, the API answers 409 PO_VERSION_CONFLICT instead of overwriting a newer edit.
+   * Optional so older clients keep working; the web app always sends it.
+   */
+  version: optionalIntegerField('Version', { min: 0 }),
 });
 
 function refinePurchaseOrder(po: z.output<typeof purchaseOrderBaseSchema>, ctx: z.RefinementCtx) {

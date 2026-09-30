@@ -1,0 +1,85 @@
+// svc-audit: centralized append-only audit_events (README 5.10). RLS: tenants read their own rows,
+// platform code reads everything.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("MIGRATE_DATABASE_URL")
+}
+
+model AuditEvent {
+  id            String   @id @db.Uuid
+  /// Source event id (idempotency at the row level as well as the inbox).
+  eventId       String   @unique @map("event_id") @db.Uuid
+  tenantId      String?  @map("tenant_id") @db.Uuid
+  producer      String   @db.VarChar(40)
+  actorType     String   @map("actor_type") @db.VarChar(10)
+  actorId       String?  @map("actor_id") @db.Uuid
+  actorName     String?  @map("actor_name") @db.VarChar(150)
+  action        String   @db.VarChar(60)
+  entityType    String   @map("entity_type") @db.VarChar(60)
+  entityId      String   @map("entity_id") @db.Uuid
+  entityVersion Int?     @map("entity_version")
+  summary       String?  @db.VarChar(500)
+  oldValue      Json?    @map("old_value")
+  newValue      Json?    @map("new_value")
+  reason        String?  @db.VarChar(500)
+  ip            String?  @db.VarChar(45)
+  userAgent     String?  @map("user_agent") @db.VarChar(400)
+  correlationId String   @map("correlation_id") @db.VarChar(128)
+  occurredAt    DateTime @map("occurred_at") @db.Timestamptz(6)
+  recordedAt    DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+
+  @@index([tenantId, occurredAt])
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, action])
+  @@index([correlationId])
+  @@map("audit_events")
+}
+
+model IdempotencyKey {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  scope        String
+  key          String   @db.Uuid
+  requestHash  String   @map("request_hash") @db.Char(64)
+  status       String   @default("IN_PROGRESS") @db.VarChar(20)
+  responseCode Int?     @map("response_code")
+  responseBody Json?    @map("response_body")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@id([tenantId, scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+model OutboxEvent {
+  id            String    @id @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  eventType     String    @map("event_type")
+  eventVersion  Int       @map("event_version")
+  aggregateType String    @map("aggregate_type")
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  envelope      Json
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+
+  @@map("outbox_events")
+}
+
+model ProcessedEvent {
+  consumer    String
+  eventId     String   @map("event_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([consumer, eventId])
+  @@map("processed_events")
+}

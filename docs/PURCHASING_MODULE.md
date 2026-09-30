@@ -99,3 +99,34 @@ create/edit items and POs and record receives but cannot issue, cancel or delete
 - PDF template / email to vendor.
 - Stock movement on receive (Inventory Stock module).
 - Billed status on receives (Bills module).
+
+## Concurrency and integrity (Phase 0)
+
+Every write to a purchase order or receive runs in one transaction that first locks the order row
+(`lockPurchaseOrder`, `SELECT ... FOR UPDATE`) and re-checks status and quantities inside the lock:
+
+- **Receive (GRN) create**: lock PO -> assert `ISSUED | PARTIALLY_RECEIVED` -> lock lines by id ->
+  assert `received + qty <= ordered` per line (`422 OVER_RECEIPT`) -> allocate number -> insert ->
+  conditional `UPDATE ... WHERE received + qty <= quantity` -> recompute status, `version + 1` ->
+  activity row + `audit.recorded.v1` outbox event. `POST /purchase-receives` **requires an
+  `Idempotency-Key` header** (UUID): same key + same body replays the stored response
+  (`Idempotent-Replayed: true`), same key + different body is `422 IDEMPOTENCY_KEY_REUSED`, a key
+  still in flight is `409 IDEMPOTENCY_IN_PROGRESS`. The key is stored on the receive
+  (`purchase_receives.idempotency_key`, unique per organization).
+- **Receive cancel**: lock the receive, refuse if already cancelled (`409 RECEIVE_ALREADY_CANCELLED`),
+  lock the PO, conditional decrement (`received - qty >= 0`), recompute status.
+- **PO edit**: lock, then guards: editable status, optional `version` must match
+  (`409 PO_VERSION_CONFLICT`), vendor frozen once anything was received, received lines keep their
+  item and cannot go below the received quantity or be removed. `version` is returned on every PO
+  response; the web app echoes the version it loaded.
+- **Transitions** (issue / cancel / close / reopen / delete): lock, transition table, guards inside
+  the lock (cancel checks live receives), conditional `UPDATE ... WHERE status = ? AND version = ?`,
+  zero rows means `409 PO_VERSION_CONFLICT`.
+- **Database nets**: `CHECK (received_quantity >= 0 AND received_quantity <= quantity)` on
+  `purchase_order_lines`; unique `(organization_id, idempotency_key)` on receives.
+- **Audit stream**: every action also writes an `audit.recorded.v1` envelope into `outbox_events`
+  in the same transaction; the relay publishes it to RabbitMQ (`AMQP_URL`) or logs it.
+
+Tests: `apps/api/test/purchases.concurrency.test.ts` (R1-R7, idempotency, outbox / inbox,
+correlation ids, health, cross-tenant sweep). Invariant checked after every scenario:
+`sum(live GRN line qty) == received_quantity <= quantity`.

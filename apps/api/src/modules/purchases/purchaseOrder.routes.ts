@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { paginationQuerySchema, purchaseOrderCancelSchema, purchaseOrderCreateQuerySchema, purchaseOrderListQuerySchema, purchaseOrderSchema } from '@b2b/shared';
-import { asyncHandler, parseQuery, validateBody, validateQuery } from '../../lib/http.js';
+import { asyncHandler, parseQuery, requireUuidParams, validateBody, validateQuery } from '../../lib/http.js';
 import { badRequest } from '../../lib/errors.js';
 import { documentUpload, requireUploadedFile } from '../../lib/upload.js';
 import { getCtx, requireAuth, requireOrganization, requirePermission } from '../../middleware/auth.js';
@@ -9,6 +9,7 @@ import * as docs from './purchaseOrderDocuments.service.js';
 
 export const purchaseOrderRouter = Router();
 purchaseOrderRouter.use(requireAuth, requireOrganization);
+requireUuidParams(purchaseOrderRouter, 'id', 'documentId');
 
 const pageQuery = paginationQuerySchema;
 const createQuery = purchaseOrderCreateQuerySchema;

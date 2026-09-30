@@ -1,0 +1,278 @@
+// svc-procurement (phase-05): purchase orders with approval / revisions, goods receipts that post
+// RECEIPT to inventory by event, and the GRN cancellation saga. Snapshots of supplier / item /
+// warehouse are taken at document time (documents never change retroactively). RLS everywhere.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("MIGRATE_DATABASE_URL")
+}
+
+model PurchaseOrder {
+  id                String    @id @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  number            String    @db.VarChar(40)
+  revision          Int       @default(0)
+  supplierId        String    @map("supplier_id") @db.Uuid
+  supplierSnapshot  Json      @map("supplier_snapshot")
+  shipToWarehouseId String    @map("ship_to_warehouse_id") @db.Uuid
+  shipToSnapshot    Json      @map("ship_to_snapshot")
+  orderDate         DateTime  @map("order_date") @db.Date
+  expectedDate      DateTime? @map("expected_date") @db.Date
+  paymentTermId     String?   @map("payment_term_id") @db.Uuid
+  currency          String    @default("INR") @db.VarChar(3)
+  /// PERCENT | AMOUNT (transaction-level discount, pro-rated before tax)
+  discountType      String    @default("PERCENT") @map("discount_type") @db.VarChar(10)
+  discountValue     Decimal   @default(0) @map("discount_value") @db.Decimal(18, 4)
+  intraState        Boolean   @default(true) @map("intra_state")
+  subtotal          Decimal   @default(0) @db.Decimal(18, 2)
+  discountAmount    Decimal   @default(0) @map("discount_amount") @db.Decimal(18, 2)
+  taxTotal          Decimal   @default(0) @map("tax_total") @db.Decimal(18, 2)
+  taxBreakup        Json      @default("[]") @map("tax_breakup")
+  total             Decimal   @default(0) @db.Decimal(18, 2)
+  status            String    @db.VarChar(20)
+  statusReason      String?   @map("status_reason") @db.VarChar(500)
+  notes             String?   @db.VarChar(1000)
+  terms             String?   @db.VarChar(2000)
+  createdBy         String    @map("created_by") @db.Uuid
+  submittedBy       String?   @map("submitted_by") @db.Uuid
+  submittedAt       DateTime? @map("submitted_at") @db.Timestamptz(6)
+  approvedBy        String?   @map("approved_by") @db.Uuid
+  approvedAt        DateTime? @map("approved_at") @db.Timestamptz(6)
+  issuedAt          DateTime? @map("issued_at") @db.Timestamptz(6)
+  cancelledAt       DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  closedAt          DateTime? @map("closed_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  version           Int       @default(0)
+
+  lines     PoLine[]
+  revisions PoRevision[]
+  approvals PoApproval[]
+  grns      Grn[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, supplierId])
+  @@map("purchase_orders")
+}
+
+model PoLine {
+  id            String  @id @db.Uuid
+  tenantId      String  @map("tenant_id") @db.Uuid
+  poId          String  @map("po_id") @db.Uuid
+  lineNo        Int     @map("line_no")
+  itemId        String  @map("item_id") @db.Uuid
+  itemSnapshot  Json    @map("item_snapshot")
+  orderedQty    Decimal @map("ordered_qty") @db.Decimal(18, 3)
+  receivedQty   Decimal @default(0) @map("received_qty") @db.Decimal(18, 3)
+  cancelledQty  Decimal @default(0) @map("cancelled_qty") @db.Decimal(18, 3)
+  unitPrice     Decimal @map("unit_price") @db.Decimal(18, 4)
+  discountPct   Decimal @default(0) @map("discount_pct") @db.Decimal(5, 2)
+  taxRate       Decimal @map("tax_rate") @db.Decimal(5, 2)
+  taxableAmount Decimal @default(0) @map("taxable_amount") @db.Decimal(18, 2)
+  taxAmount     Decimal @default(0) @map("tax_amount") @db.Decimal(18, 2)
+  lineTotal     Decimal @default(0) @map("line_total") @db.Decimal(18, 2)
+
+  po       PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  grnLines GrnLine[]
+
+  @@unique([poId, lineNo])
+  @@index([tenantId, itemId])
+  @@map("po_lines")
+}
+
+model PoRevision {
+  id        String   @id @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  poId      String   @map("po_id") @db.Uuid
+  revision  Int
+  snapshot  Json
+  reason    String   @db.VarChar(500)
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  po PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+
+  @@unique([poId, revision])
+  @@map("po_revisions")
+}
+
+model PoApproval {
+  id        String   @id @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  poId      String   @map("po_id") @db.Uuid
+  revision  Int
+  /// APPROVED | REJECTED
+  decision  String   @db.VarChar(10)
+  actorId   String   @map("actor_id") @db.Uuid
+  comment   String?  @db.VarChar(500)
+  decidedAt DateTime @default(now()) @map("decided_at") @db.Timestamptz(6)
+
+  po PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+
+  @@index([poId])
+  @@map("po_approvals")
+}
+
+model Grn {
+  id                  String    @id @db.Uuid
+  tenantId            String    @map("tenant_id") @db.Uuid
+  number              String    @db.VarChar(40)
+  poId                String    @map("po_id") @db.Uuid
+  supplierId          String    @map("supplier_id") @db.Uuid
+  supplierSnapshot    Json      @map("supplier_snapshot")
+  warehouseId         String    @map("warehouse_id") @db.Uuid
+  warehouseSnapshot   Json      @map("warehouse_snapshot")
+  receivedDate        DateTime  @map("received_date") @db.Date
+  supplierInvoiceNo   String?   @map("supplier_invoice_no") @db.VarChar(60)
+  supplierInvoiceDate DateTime? @map("supplier_invoice_date") @db.Date
+  deliveryNoteNo      String?   @map("delivery_note_no") @db.VarChar(60)
+  vehicleNo           String?   @map("vehicle_no") @db.VarChar(20)
+  /// DRAFT | RECEIVED | QC_PENDING | QC_COMPLETED | POSTING_FAILED | CANCELLATION_PENDING | CANCELLED
+  status              String    @db.VarChar(25)
+  statusReason        String?   @map("status_reason") @db.VarChar(500)
+  remarks             String?   @db.VarChar(1000)
+  idempotencyKey      String?   @map("idempotency_key") @db.Uuid
+  receiptPostingId    String?   @map("receipt_posting_id") @db.Uuid
+  createdBy           String    @map("created_by") @db.Uuid
+  receivedAt          DateTime? @map("received_at") @db.Timestamptz(6)
+  cancelledAt         DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  version             Int       @default(0)
+
+  po    PurchaseOrder @relation(fields: [poId], references: [id])
+  lines GrnLine[]
+
+  @@unique([tenantId, number])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, poId])
+  @@map("grns")
+}
+
+model GrnLine {
+  id            String   @id @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  grnId         String   @map("grn_id") @db.Uuid
+  poLineId      String   @map("po_line_id") @db.Uuid
+  lineNo        Int      @map("line_no")
+  itemId        String   @map("item_id") @db.Uuid
+  itemSnapshot  Json     @map("item_snapshot")
+  qty           Decimal  @db.Decimal(18, 3)
+  unitCost      Decimal  @map("unit_cost") @db.Decimal(18, 4)
+  binId         String?  @map("bin_id") @db.Uuid
+  conditionNote String?  @map("condition_note") @db.VarChar(300)
+  /// PENDING | DONE | REVERSED
+  qcStatus      String   @default("PENDING") @map("qc_status") @db.VarChar(10)
+  qcPassQty     Decimal  @default(0) @map("qc_pass_qty") @db.Decimal(18, 3)
+  qcFailQty     Decimal  @default(0) @map("qc_fail_qty") @db.Decimal(18, 3)
+  lotId         String?  @map("lot_id") @db.Uuid
+
+  grn     Grn             @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  poLine  PoLine          @relation(fields: [poLineId], references: [id])
+  serials GrnLineSerial[]
+
+  @@unique([grnId, lineNo])
+  @@index([poLineId])
+  @@map("grn_lines")
+}
+
+model GrnLineSerial {
+  tenantId  String  @map("tenant_id") @db.Uuid
+  grnLineId String  @map("grn_line_id") @db.Uuid
+  serialNo  String  @map("serial_no") @db.VarChar(80)
+  imei      String? @db.VarChar(20)
+
+  line GrnLine @relation(fields: [grnLineId], references: [id], onDelete: Cascade)
+
+  @@id([grnLineId, serialNo])
+  @@map("grn_line_serials")
+}
+
+model DocumentAttachment {
+  id          String   @id @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  entityType  String   @map("entity_type") @db.VarChar(20)
+  entityId    String   @map("entity_id") @db.Uuid
+  objectKey   String   @map("object_key") @db.VarChar(400)
+  fileName    String   @map("file_name") @db.VarChar(255)
+  contentType String   @map("content_type") @db.VarChar(120)
+  sizeBytes   BigInt   @map("size_bytes")
+  uploadedBy  String   @map("uploaded_by") @db.Uuid
+  uploadedAt  DateTime @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+
+  @@index([tenantId, entityType, entityId])
+  @@map("document_attachments")
+}
+
+model ProcurementSettings {
+  tenantId               String   @id @map("tenant_id") @db.Uuid
+  approverMustDiffer     Boolean  @default(true) @map("approver_must_differ")
+  approvalLimit          Decimal? @map("approval_limit") @db.Decimal(18, 2)
+  closeRequiresQc        Boolean  @default(true) @map("close_requires_qc")
+  overReceiptTolerancePct Decimal @default(0) @map("over_receipt_tolerance_pct") @db.Decimal(5, 2)
+  updatedAt              DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("procurement_settings")
+}
+
+model DocumentSequence {
+  tenantId String @map("tenant_id") @db.Uuid
+  docType  String @map("doc_type") @db.VarChar(10)
+  fy       String @db.VarChar(10)
+  lastNo   Int    @default(0) @map("last_no")
+
+  @@id([tenantId, docType, fy])
+  @@map("document_sequences")
+}
+
+/* ---- standard tables ------------------------------------------------------ */
+
+model IdempotencyKey {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  scope        String
+  key          String   @db.Uuid
+  requestHash  String   @map("request_hash") @db.Char(64)
+  status       String   @default("IN_PROGRESS") @db.VarChar(20)
+  responseCode Int?     @map("response_code")
+  responseBody Json?    @map("response_body")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@id([tenantId, scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+model OutboxEvent {
+  id            String    @id @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  eventType     String    @map("event_type")
+  eventVersion  Int       @map("event_version")
+  aggregateType String    @map("aggregate_type")
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  envelope      Json
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+
+  @@map("outbox_events")
+}
+
+model ProcessedEvent {
+  consumer    String
+  eventId     String   @map("event_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([consumer, eventId])
+  @@map("processed_events")
+}

@@ -730,6 +730,9 @@ model PurchaseOrder {
   cancelReason         String?             @map("cancel_reason") @db.VarChar(500)
   closedAt             DateTime?           @map("closed_at") @db.Timestamptz(6)
   deletedAt            DateTime?           @map("deleted_at") @db.Timestamptz(6)
+  /// Optimistic concurrency token (Phase 0, R4). Every write bumps it; edits may send the
+  /// version they were based on and get 409 PO_VERSION_CONFLICT when it is stale.
+  version              Int                 @default(0)
   createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdById          String?             @map("created_by") @db.Uuid
@@ -777,6 +780,7 @@ model PurchaseOrderLine {
   taxableAmount    Decimal  @default(0) @map("taxable_amount") @db.Decimal(18, 2)
   taxAmount        Decimal  @default(0) @map("tax_amount") @db.Decimal(18, 2)
   total            Decimal  @default(0) @db.Decimal(18, 2)
+  /// CHECK (received_quantity >= 0 AND received_quantity <= quantity) lives in the migration (Phase 0).
   receivedQuantity Decimal  @default(0) @map("received_quantity") @db.Decimal(18, 3)
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -869,6 +873,8 @@ model PurchaseReceive {
   totalQuantity   Decimal               @default(0) @map("total_quantity") @db.Decimal(18, 3)
   cancelledAt     DateTime?             @map("cancelled_at") @db.Timestamptz(6)
   cancelReason    String?               @map("cancel_reason") @db.VarChar(500)
+  /// Idempotency-Key the GRN was created with (Phase 0, R2). Unique per organization.
+  idempotencyKey  String?               @map("idempotency_key") @db.Uuid
   createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
   createdById     String?               @map("created_by") @db.Uuid
@@ -881,6 +887,7 @@ model PurchaseReceive {
   lines         PurchaseReceiveLine[]
 
   // UNIQUE (organization_id, lower(receive_number)) lives in the migration.
+  @@unique([organizationId, idempotencyKey])
   @@index([organizationId, status])
   @@index([organizationId, purchaseOrderId])
   @@index([organizationId, vendorId])
@@ -906,4 +913,54 @@ model PurchaseReceiveLine {
   @@index([purchaseOrderLineId])
   @@index([organizationId])
   @@map("purchase_receive_lines")
+}
+
+/* ============================================================
+ * Platform plumbing (Phase 0): idempotency keys, outbox, inbox.
+ * No foreign keys to organizations on purpose: these tables move into
+ * each service database unchanged (see phase-plan/README.md 5.6 / 5.8).
+ * ============================================================ */
+
+model IdempotencyKey {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  scope        String
+  key          String   @db.Uuid
+  requestHash  String   @map("request_hash") @db.Char(64)
+  /// IN_PROGRESS | COMPLETED
+  status       String   @default("IN_PROGRESS") @db.VarChar(20)
+  responseCode Int?     @map("response_code")
+  responseBody Json?    @map("response_body")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@id([tenantId, scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}
+
+model OutboxEvent {
+  id            String    @id @db.Uuid
+  tenantId      String?   @map("tenant_id") @db.Uuid
+  eventType     String    @map("event_type")
+  eventVersion  Int       @map("event_version")
+  aggregateType String    @map("aggregate_type")
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  envelope      Json
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(6)
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+
+  // Partial index outbox_unpublished (next_attempt_at, created_at) WHERE published_at IS NULL lives in the migration.
+  @@map("outbox_events")
+}
+
+model ProcessedEvent {
+  consumer    String
+  eventId     String   @map("event_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([consumer, eventId])
+  @@map("processed_events")
 }

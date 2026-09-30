@@ -1,0 +1,18 @@
+groups:
+  - name: platform-events
+    rules:
+      - alert: DeadLetterQueueNotEmpty
+        expr: sum by (queue) (rabbitmq_detailed_queue_messages{queue=~".*\\.dlq"}) > 0
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: 'Dead-letter queue {{ $labels.queue }} has messages'
+          description: 'Consumers exhausted retries (10s, 60s, 10m). Inspect and replay from the DLQ.'
+      - alert: OutboxBacklog
+        expr: outbox_unpublished_events > 1000
+        for: 5m
+        labels:
+          severity: warn
+        annotations:
+          summary: 'Outbox relay is falling behind ({{ $value }} unpublished events)'

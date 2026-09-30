@@ -57,6 +57,7 @@ export function serializePoListItem(po: PoListRecord & { lines?: { quantity: Pri
     expectedDeliveryDate: day(po.expectedDeliveryDate),
     vendor: po.vendor,
     status: po.status,
+    version: po.version,
     receiveState: progress?.state ?? null,
     currencyCode: po.currencyCode,
     subTotal: n0(po.subTotal),
@@ -106,6 +107,8 @@ export function serializePoDetail(po: PoDetailRecord) {
     orderDate: day(po.orderDate),
     expectedDeliveryDate: day(po.expectedDeliveryDate),
     status: po.status,
+    /** Send this back on PUT to get a 409 instead of silently overwriting a newer edit. */
+    version: po.version,
     receiveState: progress.state,
     orderedQuantity: progress.ordered,
     receivedQuantity: progress.received,

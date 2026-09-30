@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { PURCHASE_ORDER_EDITABLE_STATUSES, PURCHASE_ORDER_STATUS_LABELS } from '@b2b/shared';
@@ -13,6 +14,12 @@ export function PurchaseOrderEditPage() {
   const po = usePurchaseOrder(id);
   const options = usePurchaseOrderFormOptions();
   const update = useUpdatePurchaseOrder(id);
+  // The version the form was loaded from. Sent with the edit so a change made by someone else in the
+  // meantime is reported as a conflict (409) instead of being silently overwritten.
+  const [baseVersion, setBaseVersion] = useState<number | null>(null);
+  useEffect(() => {
+    if (po.data && baseVersion === null) setBaseVersion(po.data.version);
+  }, [po.data, baseVersion]);
 
   const crumbs = [{ label: 'Purchases' }, { label: 'Purchase Orders', to: '/purchases/purchase-orders' }, { label: po.data?.purchaseOrderNumber ?? 'Purchase Order', to: `/purchases/purchase-orders/${id}` }, { label: 'Edit' }];
 
@@ -67,7 +74,7 @@ export function PurchaseOrderEditPage() {
         po={po.data}
         submitting={update.isPending}
         onSubmit={async (payload) => {
-          const saved = await update.mutateAsync(payload);
+          const saved = await update.mutateAsync({ ...payload, version: baseVersion ?? po.data?.version ?? null });
           toast.success(`${saved.purchaseOrderNumber} updated`);
           return saved;
         }}

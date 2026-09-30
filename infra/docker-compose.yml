@@ -1,0 +1,167 @@
+# Platform infrastructure for local development and the first VPS deployment (Phase 0, step 8.2).
+#
+#   npm run infra:up                      # Postgres, RabbitMQ, Redis, MinIO
+#   docker compose -f infra/docker-compose.yml --profile observability up -d   # + OTel, Prometheus, Grafana, Loki, Tempo
+#
+# Ports are offset from the defaults so the stack coexists with the team's other containers.
+name: b2b-platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: b2b-platform-postgres
+    environment:
+      POSTGRES_USER: platform_admin
+      POSTGRES_PASSWORD: platform_admin_dev
+      POSTGRES_DB: postgres
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+      # Runtime role password used by every <svc>_role created by the init script.
+      SERVICE_ROLE_PASSWORD: b2b_dev
+    ports:
+      - '5435:5432'
+    volumes:
+      - b2b-platform-pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U platform_admin -d postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: b2b-platform-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: b2b
+      RABBITMQ_DEFAULT_PASS: b2b_dev
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    volumes:
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - b2b-platform-rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'check_running']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    container_name: b2b-platform-redis
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '6380:6379'
+    volumes:
+      - b2b-platform-redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    container_name: b2b-platform-minio
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: b2b
+      MINIO_ROOT_PASSWORD: b2b_dev_minio
+    ports:
+      - '9020:9000'
+      - '9021:9001'
+    volumes:
+      - b2b-platform-minio:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # Creates the buckets every service expects (README 5.11 and the Phase 0 event archive).
+  minio-init:
+    image: minio/mc:latest
+    container_name: b2b-platform-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 b2b b2b_dev_minio &&
+        mc mb --ignore-existing local/tenants &&
+        mc mb --ignore-existing local/platform &&
+        echo 'buckets ready'
+      "
+
+  # ---- observability (optional profile) -------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    container_name: b2b-platform-otel
+    profiles: [observability]
+    command: ['--config=/etc/otel/config.yaml']
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - '4317:4317' # OTLP gRPC
+      - '4318:4318' # OTLP HTTP
+    depends_on: [tempo, loki, prometheus]
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: b2b-platform-prometheus
+    profiles: [observability]
+    command: ['--config.file=/etc/prometheus/prometheus.yml', '--web.enable-remote-write-receiver']
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - b2b-platform-prometheus:/prometheus
+    ports:
+      - '9090:9090'
+
+  loki:
+    image: grafana/loki:3.1.1
+    container_name: b2b-platform-loki
+    profiles: [observability]
+    command: ['-config.file=/etc/loki/local-config.yaml']
+    volumes:
+      - b2b-platform-loki:/loki
+    ports:
+      - '3100:3100'
+
+  tempo:
+    image: grafana/tempo:2.6.0
+    container_name: b2b-platform-tempo
+    profiles: [observability]
+    command: ['-config.file=/etc/tempo/tempo.yaml']
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - b2b-platform-tempo:/var/tempo
+    ports:
+      - '3200:3200'
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: b2b-platform-grafana
+    profiles: [observability]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - b2b-platform-grafana:/var/lib/grafana
+    ports:
+      - '3001:3000'
+    depends_on: [prometheus, loki, tempo]
+
+volumes:
+  b2b-platform-pgdata:
+  b2b-platform-rabbitmq:
+  b2b-platform-redis:
+  b2b-platform-minio:
+  b2b-platform-prometheus:
+  b2b-platform-loki:
+  b2b-platform-tempo:
+  b2b-platform-grafana:
