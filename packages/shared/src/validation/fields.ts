@@ -29,7 +29,9 @@ import {
   validatePersonName,
   validatePhone,
   validatePincode,
+  validateTdsSection,
   validateText,
+  validateUdyam,
   validateUrl,
   normalizeSearch,
   type NumberRuleOptions,
@@ -188,7 +190,8 @@ export function phoneField(opts: { required?: boolean } = {}) {
 /**
  * Phone number that sits next to a dial-code select. The field itself only trims and caps the
  * length; refineMobileForDialCode applies the strict Indian rule for +91 and the lenient phone
- * rule otherwise, so the message always matches the selected country.
+ * rule otherwise, so the message always matches the selected country. Separators are stripped
+ * from the stored value, as in mobileField / phoneField.
  */
 export function dialCodePhoneField() {
   return nullableString
@@ -196,7 +199,7 @@ export function dialCodePhoneField() {
     .superRefine((v, ctx) => {
       if (v.length > 20) issue(ctx, MESSAGES.tooLong('Phone number', 20));
     })
-    .transform((v) => (v === '' ? null : v));
+    .transform((v) => (v === '' ? null : (normalizePhoneInput(v) ?? v)));
 }
 
 /** "+91"-style dialling code; blank falls back to the given default. */
@@ -257,6 +260,30 @@ export function ifscField() {
     .transform((v) => (typeof v === 'string' ? v.trim().toUpperCase() : ''))
     .superRefine((v, ctx) => {
       const problem = validateIfsc(v, true);
+      if (problem) issue(ctx, problem);
+    });
+}
+
+/** Udyam (MSME) registration number, stored upper-case. Pair with a "required when MSME" refinement. */
+export function udyamField() {
+  return nullableString
+    .transform((v) => (typeof v === 'string' ? v.trim().toUpperCase() : ''))
+    .transform((v) => (v === '' ? null : v))
+    .superRefine((v, ctx) => {
+      if (v === null) return;
+      const problem = validateUdyam(v);
+      if (problem) issue(ctx, problem);
+    });
+}
+
+/** Income-tax TDS section (194C, 194J, ...), stored upper-case without spaces. */
+export function tdsSectionField() {
+  return nullableString
+    .transform((v) => (typeof v === 'string' ? v.replace(/\s+/g, '').toUpperCase() : ''))
+    .transform((v) => (v === '' ? null : v))
+    .superRefine((v, ctx) => {
+      if (v === null) return;
+      const problem = validateTdsSection(v);
       if (problem) issue(ctx, problem);
     });
 }

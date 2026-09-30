@@ -21,6 +21,8 @@ export const MESSAGES = {
   pan: 'PAN must be 10 characters in the format AAAAA9999A',
   ifsc: 'IFSC must be 11 characters like HDFC0001234',
   bankAccount: 'Account number must be 6 to 34 letters or digits',
+  udyam: 'Udyam number must look like UDYAM-MH-12-1234567',
+  tdsSection: 'TDS section must look like 194C or 194IA',
   hsn: 'HSN/SAC must be 4 to 8 digits',
   url: 'Enter a valid website address starting with http:// or https://',
   code: 'Use upper-case letters, digits, dot, underscore, slash or hyphen',

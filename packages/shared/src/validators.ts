@@ -19,6 +19,10 @@ export const PHONE_SEPARATOR_REGEX = /[\s().-]/g;
 export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const BANK_ACCOUNT_REGEX = /^[0-9A-Za-z]{6,34}$/;
 export const HSN_REGEX = /^[0-9]{4,8}$/;
+/** Udyam (MSME) registration number: UDYAM-<state>-<2 digits>-<7 digits>. */
+export const UDYAM_REGEX = /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/;
+/** Income-tax TDS section: 192 to 196 with an optional letter suffix (194C, 194IA, 194LBA). */
+export const TDS_SECTION_REGEX = /^19[2-6][A-Z]{0,3}$/;
 /** Person names: letters (any script), spaces, dot, apostrophe, hyphen. No digits. */
 export const PERSON_NAME_REGEX = /^[\p{L}][\p{L}\p{M} .'-]*$/u;
 /** Company / display names: letters, digits and common punctuation used in trade names. */
@@ -69,6 +73,14 @@ export function stateCodeFromGstin(gstin: string): string | null {
 
 export function isValidIfsc(input: string): boolean {
   return IFSC_REGEX.test(input.trim().toUpperCase());
+}
+
+export function isValidUdyam(input: string): boolean {
+  return UDYAM_REGEX.test(input.trim().toUpperCase());
+}
+
+export function isValidTdsSection(input: string): boolean {
+  return TDS_SECTION_REGEX.test(input.trim().toUpperCase());
 }
 
 export function isValidPincodeIn(input: string): boolean {

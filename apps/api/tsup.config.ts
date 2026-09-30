@@ -8,6 +8,6 @@ export default defineConfig({
   outDir: 'dist',
   clean: true,
   sourcemap: true,
-  // The shared workspace package ships TypeScript source, so bundle it in.
-  noExternal: ['@b2b/shared'],
+  // The workspace packages ship TypeScript source, so bundle them in.
+  noExternal: ['@b2b/shared', '@b2b/contracts', '@b2b/platform-kit'],
 });

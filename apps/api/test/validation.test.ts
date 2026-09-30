@@ -12,6 +12,7 @@ import {
   mobileField,
   normalizeSearch,
   panField,
+  partyFormSchema,
   sanitizeInput,
   searchField,
   validateAmount,
@@ -28,6 +29,8 @@ import {
   validatePincode,
   validateQuantity,
   validateRequired,
+  validateTdsSection,
+  validateUdyam,
   validateUploadFile,
   validateUrl,
 } from '@b2b/shared';
@@ -98,6 +101,30 @@ describe('shared rule functions (pure)', () => {
     assert.equal(validateIfsc('HDFC1001234'), MESSAGES.ifsc, '5th character must be 0');
     assert.equal(validateIfsc('HDF00001234'), MESSAGES.ifsc, 'first four must be letters');
     assert.equal(validateIfsc('HDFC000123'), MESSAGES.ifsc, 'length 11');
+  });
+
+  it('Udyam number and TDS section: format and case folding', () => {
+    assert.equal(validateUdyam('udyam-mh-12-1234567'), null, 'lowercase is accepted');
+    assert.equal(validateUdyam('HELLO'), MESSAGES.udyam);
+    assert.equal(validateUdyam('UDYAM-MH-12-123456'), MESSAGES.udyam, 'seven trailing digits');
+    assert.equal(validateTdsSection('194c'), null);
+    assert.equal(validateTdsSection('194LBA'), null);
+    assert.equal(validateTdsSection('!!'), MESSAGES.tdsSection);
+    assert.equal(validateTdsSection('207C'), MESSAGES.tdsSection, 'TDS sections are 192 to 196');
+  });
+
+  it('party form: mobile stored as 10 digits, Udyam / TDS normalised, bad values rejected', () => {
+    const base = { displayName: 'Acme', gstTreatment: 'UNREGISTERED', sourceOfSupply: '07' };
+    const ok = partyFormSchema.parse({ ...base, mobile: '98765 43210', msmeRegistered: true, msmeNumber: 'udyam-mh-12-1234567', tdsApplicable: true, tdsSectionCode: '194 ia' });
+    assert.equal(ok.mobile, '9876543210', 'separators are stripped');
+    assert.equal(ok.msmeNumber, 'UDYAM-MH-12-1234567');
+    assert.equal(ok.tdsSectionCode, '194IA');
+    const bad = partyFormSchema.safeParse({ ...base, mobile: '98765abcde', msmeRegistered: true, msmeNumber: 'hello', tdsApplicable: true, tdsSectionCode: '!!' });
+    assert.equal(bad.success, false);
+    const byPath = Object.fromEntries(bad.error!.issues.map((i) => [i.path.join('.'), i.message]));
+    assert.equal(byPath.mobile, MESSAGES.mobile);
+    assert.equal(byPath.msmeNumber, MESSAGES.udyam);
+    assert.equal(byPath.tdsSectionCode, MESSAGES.tdsSection);
   });
 
   it('numbers: amounts, quantities, percentages and integers', () => {

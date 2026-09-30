@@ -20,6 +20,8 @@ import {
   isValidPan,
   isValidPhone,
   isValidPincodeIn,
+  isValidTdsSection,
+  isValidUdyam,
   isValidUrl,
   normalizePhoneInput,
   parseDecimalInput,
@@ -140,6 +142,18 @@ export function validateIfsc(value: unknown, required = true): ValidationResult 
   const raw = text(value).trim();
   if (raw === '') return required ? MESSAGES.required('IFSC') : null;
   return isValidIfsc(raw) ? null : MESSAGES.ifsc;
+}
+
+export function validateUdyam(value: unknown, required = false): ValidationResult {
+  const raw = text(value).trim();
+  if (raw === '') return required ? MESSAGES.required('Udyam number') : null;
+  return isValidUdyam(raw) ? null : MESSAGES.udyam;
+}
+
+export function validateTdsSection(value: unknown, required = false): ValidationResult {
+  const raw = text(value).trim();
+  if (raw === '') return required ? MESSAGES.required('TDS section') : null;
+  return isValidTdsSection(raw) ? null : MESSAGES.tdsSection;
 }
 
 export function validateBankAccountNumber(value: unknown, required = true): ValidationResult {

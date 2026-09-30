@@ -71,7 +71,10 @@ export function createServiceApp(options: ServiceAppOptions): Express {
   const { logger } = options;
   const app = express();
   app.disable('x-powered-by');
-  app.set('trust proxy', 1);
+  // Services sit behind the gateway and, in deployment, a reverse proxy in front of it: two
+  // loopback hops. Trusting exactly one hop made req.ip the proxy's address for every caller, so
+  // per-IP limits (applications, login) were shared by all users. Trust loopback hops instead.
+  app.set('trust proxy', 'loopback');
   app.use(correlation(options.correlation));
   app.use(helmet());
   app.use(

@@ -40,6 +40,8 @@ import {
   requiredText,
   searchField,
   sortOrderField,
+  tdsSectionField,
+  udyamField,
   urlField,
   uuidField,
 } from './validation/fields.js';
@@ -160,9 +162,9 @@ export const vendorBaseSchema = z.object({
   currencyCode: z.string().trim().length(3).toUpperCase().default('INR'),
   vendorType: optionalEnum(VENDOR_TYPES),
   msmeRegistered: z.boolean().default(false),
-  msmeNumber: optionalText(30, { transform: 'upper' }, 'MSME number'),
+  msmeNumber: udyamField(),
   tdsApplicable: z.boolean().default(false),
-  tdsSectionCode: optionalText(20, { transform: 'upper' }, 'TDS section'),
+  tdsSectionCode: tdsSectionField(),
   tcsApplicable: z.boolean().default(false),
   /** Free-form extension point for future TDS/TCS/e-invoicing settings. */
   taxConfig: z.record(z.unknown()).default({}),
