@@ -1,8 +1,9 @@
 /**
  * Phase 5 end-to-end (5.11): master + party + inventory + qc + procurement in one process with a shared
- * in-memory broker and real HTTP between procurement and its sources. PO 100 -> GRN 100 -> QC 96/4 ->
- * stock AVAILABLE 96, REJECTED 4, QC_HOLD 0; serial history PO -> GRN -> QC; duplicate serial refused at
- * GRN; cancellation before QC reverses stock, after inspection is refused; reconciliation clean.
+ * in-memory broker and real HTTP between procurement and its sources. PO for two laptop configurations
+ * (10 Dell + 4 HP) -> GRN 14 serials -> QC 8/2 and 4/0 -> stock AVAILABLE 12, REJECTED 2, QC_HOLD 0;
+ * serial history PO -> GRN -> QC; duplicate serial refused at GRN; cancellation before QC reverses
+ * stock, after inspection is refused; reconciliation clean.
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -49,9 +50,17 @@ const on = (app: Express, token: string) => ({
 const idem = () => ({ 'Idempotency-Key': randomUUID() });
 const settle = () => settleEvents(broker, [master.relay, party.relay, inventory.relay, qc.relay, proc.relay], 60);
 
+const SPEC_KEYS = ['brand', 'model', 'generation', 'processor', 'ram', 'ssd', 'gpu', 'screenSize'] as const;
+const allMatch = () => Object.fromEntries(SPEC_KEYS.map((k) => [k, { match: true }]));
+const passed = (serialNo: string) => ({ serialNo, result: 'PASS', gradeCode: 'A', laptop: { specChecks: allMatch(), powersOn: true } });
+const failed = (serialNo: string) => ({ serialNo, result: 'FAIL', laptop: { specChecks: { ...allMatch(), ram: { match: false, actual: '8 GB' } }, powersOn: true } });
+const DELL_SERIALS = Array.from({ length: 10 }, (_, i) => `DL${String(i + 1).padStart(4, '0')}`);
+const HP_SERIALS = ['SN0001', 'SN0002', 'SN0003', 'SN0004'];
+const terms = { monthlyRentalAmount: 2500, tenureMonths: 12 };
+
 let warehouseId: string;
-let widgetId: string;
-let phoneId: string;
+let dellId: string;
+let hpId: string;
 let supplierId: string;
 
 before(async () => {
@@ -80,17 +89,27 @@ before(async () => {
   await broker.publish(rk(EVENT_TYPES.TENANT_ACTIVATED), activated);
   await settle();
   const m = on(master.app, owner);
-  const units = (await m.get('/api/v1/master/units')).body.data as { id: string; code: string }[];
-  const taxes = (await m.get('/api/v1/master/tax-rates')).body.data as { id: string; name: string }[];
-  const unitId = units.find((u) => u.code === 'PCS')!.id;
-  const taxId = taxes.find((t) => t.name === 'GST 18%')!.id;
   warehouseId = (await m.get('/api/v1/master/warehouses')).body.data[0].id;
-  const widget = await m.post('/api/v1/master/products', { sku: 'WIDGET', name: 'Widget', type: 'GOODS', unitId, taxRateId: taxId, activate: true });
-  assert.equal(widget.status, 201, JSON.stringify(widget.body));
-  widgetId = widget.body.data.id;
-  const phone = await m.post('/api/v1/master/products', { sku: 'PHONE', name: 'Phone', type: 'GOODS', unitId, taxRateId: taxId, isSerialized: true, serialPattern: '^SN[0-9]{4}$', activate: true });
-  assert.equal(phone.status, 201, JSON.stringify(phone.body));
-  phoneId = phone.body.data.id;
+  // two laptop configurations (serialized, QC required, GST 18% by default)
+  const seeded = (await m.get('/api/v1/master/laptop-specs')).body.data as { id: string; kind: string; name: string }[];
+  const pick = (kind: string, name: string) => seeded.find((o) => o.kind === kind && o.name === name)!.id;
+  const add = async (body: Record<string, unknown>) => {
+    const r = await m.post('/api/v1/master/laptop-specs', body);
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    return r.body.data.id as string;
+  };
+  const laptop = async (brand: string, model: string, generation: string, processor: string, gpuId: string) => {
+    const brandId = pick('BRAND', brand);
+    const r = await m.post('/api/v1/master/laptops', {
+      brandId, modelId: await add({ kind: 'MODEL', name: model, brandId }), generationId: pick('GENERATION', generation), processorId: await add({ kind: 'PROCESSOR', name: processor }),
+      ramId: pick('RAM', '16 GB'), ssdId: pick('SSD', '512 GB'), gpuId, screenSizeId: pick('SCREEN_SIZE', '14"'), activate: true,
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    return r.body.data.id as string;
+  };
+  const irisXe = await add({ kind: 'GPU', name: 'Intel Iris Xe' });
+  dellId = await laptop('Dell', 'Latitude 5440', '13th Gen', 'Intel Core i5-1345U', irisXe);
+  hpId = await laptop('HP', 'EliteBook 840 G9', '12th Gen', 'Intel Core i7-1255U', irisXe);
   const sup = await on(party.app, owner).post('/api/v1/party/suppliers', { legalName: 'Acme Components Pvt Ltd', displayName: 'Acme', gstTreatment: 'REGISTERED', gstin: '27AAPFU0939F1ZV', pan: 'AAPFU0939F', addresses: [{ kind: 'BILLING', line1: '12 MIDC Road', city: 'Pune', state: 'Maharashtra', stateCode: '27', pincode: '411001', isDefault: true }], contacts: [{ name: 'Anita Desai', email: 'anita@acme.test', isPrimary: true }] });
   assert.equal(sup.status, 201, JSON.stringify(sup.body));
   supplierId = sup.body.data.id;
@@ -108,42 +127,47 @@ const stockOf = async (itemId: string) => {
 };
 
 describe('end to end', () => {
-  it('PO 100 -> GRN 100 -> QC 96/4 -> AVAILABLE 96, REJECTED 4, QC_HOLD 0; serial history PO -> GRN -> QC; PO closed', async () => {
+  it('PO 10 Dell + 4 HP -> GRN 14 serials -> QC 8/2 and 4/0 -> AVAILABLE 12, REJECTED 2, QC_HOLD 0; serial history PO -> GRN -> QC; PO closed', async () => {
     const p = on(proc.app, owner);
-    const created = await p.post('/api/v1/procurement/purchase-orders', { supplierId, shipToWarehouseId: warehouseId, orderDate: '2026-10-01', lines: [{ itemId: widgetId, orderedQty: 100, unitPrice: 50 }, { itemId: phoneId, orderedQty: 4, unitPrice: 8000 }] });
+    const created = await p.post('/api/v1/procurement/purchase-orders', { supplierId, shipToWarehouseId: warehouseId, orderDate: '2026-10-01', lines: [{ itemId: dellId, orderedQty: 10, unitPrice: 55000, monthlyRentalAmount: 3500, tenureMonths: 12 }, { itemId: hpId, orderedQty: 4, unitPrice: 62000, monthlyRentalAmount: 4000, tenureMonths: 24 }] });
     assert.equal(created.status, 201, JSON.stringify(created.body));
     const po = created.body.data;
-    assert.equal(po.total, 43660, '(5000 + 32000) * 1.18, intra-state');
+    assert.equal(po.total, 941640, '(550000 + 248000) * 1.18, intra-state');
     assert.equal(po.supplier.gstin, '27AAPFU0939F1ZV');
-    assert.equal(po.lines[1].item.isSerialized, true);
+    assert.deepEqual(po.lines[1].item.specs, { brand: 'HP', model: 'EliteBook 840 G9', generation: '12th Gen', processor: 'Intel Core i7-1255U', ram: '16 GB', ssd: '512 GB', gpu: 'Intel Iris Xe', screenSize: '14"' }, 'specs resolved from master');
+    assert.deepEqual([po.lines[1].monthlyRentalAmount, po.lines[1].tenureMonths], [4000, 24]);
+    // the same configuration twice on one PO is refused (merge into one line)
+    const twice = await p.post('/api/v1/procurement/purchase-orders', { supplierId, shipToWarehouseId: warehouseId, orderDate: '2026-10-01', lines: [{ itemId: dellId, orderedQty: 5, unitPrice: 55000, ...terms }, { itemId: dellId, orderedQty: 5, unitPrice: 55000, ...terms }] });
+    assert.equal(twice.body.error.code, 'PO_DUPLICATE_LINE', JSON.stringify(twice.body));
     assert.equal((await p.post(`/api/v1/procurement/purchase-orders/${po.id}/submit`)).status, 200);
     assert.equal((await on(proc.app, approver).post(`/api/v1/procurement/purchase-orders/${po.id}/approve`)).status, 200);
     assert.equal((await on(proc.app, approver).post(`/api/v1/procurement/purchase-orders/${po.id}/issue`)).body.data.status, 'ISSUED');
     await settle();
     // master saw the PO and now guards the products against deletion
-    const del = await request(master.app).delete(`/api/v1/master/products/${widgetId}`).set('Authorization', `Bearer ${owner}`);
+    const del = await request(master.app).delete(`/api/v1/master/products/${dellId}`).set('Authorization', `Bearer ${owner}`);
     assert.equal(del.status, 422, JSON.stringify(del.body));
     assert.equal(del.body.error.code, 'MASTER_IN_USE');
 
-    const widgetLine = po.lines.find((l: { itemId: string }) => l.itemId === widgetId);
-    const phoneLine = po.lines.find((l: { itemId: string }) => l.itemId === phoneId);
-    const grn = await p.post('/api/v1/procurement/grns?receive=true', { poId: po.id, receivedDate: '2026-10-02', supplierInvoiceNo: 'INV-77', lines: [{ poLineId: widgetLine.id, qty: 100 }, { poLineId: phoneLine.id, qty: 4, serials: ['SN0001', 'SN0002', 'SN0003', 'SN0004'].map((s) => ({ serialNo: s })) }] }, idem());
+    const dellLine = po.lines.find((l: { itemId: string }) => l.itemId === dellId);
+    const hpLine = po.lines.find((l: { itemId: string }) => l.itemId === hpId);
+    const grn = await p.post('/api/v1/procurement/grns?receive=true', { poId: po.id, receivedDate: '2026-10-02', supplierInvoiceNo: 'INV-77', lines: [{ poLineId: dellLine.id, qty: 10, serials: DELL_SERIALS.map((s) => ({ serialNo: s })) }, { poLineId: hpLine.id, qty: 4, serials: HP_SERIALS.map((s) => ({ serialNo: s })) }] }, idem());
     assert.equal(grn.status, 201, JSON.stringify(grn.body));
     assert.equal(grn.body.data.status, 'RECEIVED');
     assert.equal((await p.get(`/api/v1/procurement/purchase-orders/${po.id}`)).body.data.status, 'RECEIVED');
     await settle();
     assert.equal((await p.get(`/api/v1/procurement/grns/${grn.body.data.id}`)).body.data.status, 'QC_PENDING');
-    assert.deepEqual(await stockOf(widgetId), { qcHold: 100, available: 0, rejected: 0, reserved: 0 });
-    assert.deepEqual(await stockOf(phoneId), { qcHold: 4, available: 0, rejected: 0, reserved: 0 });
-    const lots = (await on(qc.app, owner).get(`/api/v1/qc/lots?sourceId=${grn.body.data.id}`)).body.data as { id: string; itemId: string; mode: string; status: string; serials: string[] }[];
+    assert.deepEqual(await stockOf(dellId), { qcHold: 10, available: 0, rejected: 0, reserved: 0 });
+    assert.deepEqual(await stockOf(hpId), { qcHold: 4, available: 0, rejected: 0, reserved: 0 });
+    const lots = (await on(qc.app, owner).get(`/api/v1/qc/lots?sourceId=${grn.body.data.id}`)).body.data as { id: string; itemId: string; mode: string; status: string; isLaptop: boolean; serials: string[] }[];
     assert.equal(lots.length, 2);
-    const widgetLot = lots.find((l) => l.itemId === widgetId)!;
-    const phoneLot = lots.find((l) => l.itemId === phoneId)!;
-    assert.equal(widgetLot.mode, 'QUANTITY');
-    assert.deepEqual(phoneLot.serials, ['SN0001', 'SN0002', 'SN0003', 'SN0004']);
+    const dellLot = lots.find((l) => l.itemId === dellId)!;
+    const hpLot = lots.find((l) => l.itemId === hpId)!;
+    assert.equal(dellLot.mode, 'SERIAL');
+    assert.equal(dellLot.isLaptop, true);
+    assert.deepEqual(hpLot.serials, HP_SERIALS);
 
     // a duplicate serial is refused at GRN time by the synchronous pre-check
-    const po2 = await p.post('/api/v1/procurement/purchase-orders', { supplierId, shipToWarehouseId: warehouseId, orderDate: '2026-10-03', lines: [{ itemId: phoneId, orderedQty: 1, unitPrice: 8000 }] });
+    const po2 = await p.post('/api/v1/procurement/purchase-orders', { supplierId, shipToWarehouseId: warehouseId, orderDate: '2026-10-03', lines: [{ itemId: hpId, orderedQty: 1, unitPrice: 62000, ...terms }] });
     await p.post(`/api/v1/procurement/purchase-orders/${po2.body.data.id}/submit`);
     await on(proc.app, approver).post(`/api/v1/procurement/purchase-orders/${po2.body.data.id}/approve`);
     await on(proc.app, approver).post(`/api/v1/procurement/purchase-orders/${po2.body.data.id}/issue`);
@@ -153,18 +177,20 @@ describe('end to end', () => {
 
     // QC decisions
     const q = on(qc.app, approver);
-    await on(qc.app, owner).post('/api/v1/qc/defect-codes', { code: 'SCRATCH', description: 'Scratched' });
-    const widgetDecision = await q.post(`/api/v1/qc/lots/${widgetLot.id}/decide`, { passQty: 96, failQty: 4, defectCodes: ['SCRATCH'] });
-    assert.equal(widgetDecision.status, 200, JSON.stringify(widgetDecision.body));
-    assert.equal((await q.put(`/api/v1/qc/lots/${phoneLot.id}/results`, { results: ['SN0001', 'SN0002', 'SN0003', 'SN0004'].map((s) => ({ serialNo: s, result: 'PASS', gradeCode: 'A' })) })).status, 200);
-    assert.equal((await q.post(`/api/v1/qc/lots/${phoneLot.id}/decide`, {})).body.data.passQty, 4);
+    const dellResults = await q.put(`/api/v1/qc/lots/${dellLot.id}/results`, { results: [...DELL_SERIALS.slice(0, 8).map(passed), ...DELL_SERIALS.slice(8).map(failed)] });
+    assert.equal(dellResults.status, 200, JSON.stringify(dellResults.body));
+    const dellDecision = await q.post(`/api/v1/qc/lots/${dellLot.id}/decide`, {});
+    assert.equal(dellDecision.status, 200, JSON.stringify(dellDecision.body));
+    assert.deepEqual([dellDecision.body.data.passQty, dellDecision.body.data.failQty], [8, 2]);
+    assert.equal((await q.put(`/api/v1/qc/lots/${hpLot.id}/results`, { results: HP_SERIALS.map(passed) })).status, 200);
+    assert.equal((await q.post(`/api/v1/qc/lots/${hpLot.id}/decide`, {})).body.data.passQty, 4);
     await settle();
-    assert.deepEqual(await stockOf(widgetId), { qcHold: 0, available: 96, rejected: 4, reserved: 0 });
-    assert.deepEqual(await stockOf(phoneId), { qcHold: 0, available: 4, rejected: 0, reserved: 0 });
-    assert.equal((await on(qc.app, owner).get(`/api/v1/qc/lots/${widgetLot.id}`)).body.data.status, 'CLOSED');
+    assert.deepEqual(await stockOf(dellId), { qcHold: 0, available: 8, rejected: 2, reserved: 0 });
+    assert.deepEqual(await stockOf(hpId), { qcHold: 0, available: 4, rejected: 0, reserved: 0 });
+    assert.equal((await on(qc.app, owner).get(`/api/v1/qc/lots/${dellLot.id}`)).body.data.status, 'CLOSED');
     const grnDone = (await p.get(`/api/v1/procurement/grns/${grn.body.data.id}`)).body.data;
     assert.equal(grnDone.status, 'QC_COMPLETED');
-    assert.deepEqual(grnDone.qcProgress, { total: 2, done: 2, passQty: 100, failQty: 4 });
+    assert.deepEqual(grnDone.qcProgress, { total: 2, done: 2, passQty: 12, failQty: 2 });
     assert.equal((await p.get(`/api/v1/procurement/purchase-orders/${po.id}`)).body.data.status, 'CLOSED');
 
     const serial = (await on(inventory.app, owner).get('/api/v1/inventory/serials?q=SN0002')).body.data[0];
@@ -173,11 +199,11 @@ describe('end to end', () => {
     assert.equal(serial.gradeCode, 'A');
     assert.equal(serial.grnId, grn.body.data.id);
     assert.equal(serial.poId, po.id);
-    assert.equal(serial.qcLotId, phoneLot.id);
+    assert.equal(serial.qcLotId, hpLot.id);
     const history = (await on(inventory.app, owner).get(`/api/v1/inventory/serials/${serial.id}/history`)).body.data as { postingType: string; refType: string }[];
     assert.deepEqual(history.map((h) => [h.postingType, h.refType]), [['RECEIPT', 'GRN'], ['QC_PASS', 'QC_LOT']]);
-    const avail = (await on(inventory.app, owner).get(`/api/v1/inventory/stock/${widgetId}`)).body.data;
-    assert.equal(avail.byWarehouse.find((w: { bucket: string }) => w.bucket === 'REJECTED').qty, 4, 'failed units sit in REJECTED and are never available');
+    const avail = (await on(inventory.app, owner).get(`/api/v1/inventory/stock/${dellId}`)).body.data;
+    assert.equal(avail.byWarehouse.find((w: { bucket: string }) => w.bucket === 'REJECTED').qty, 2, 'failed units sit in REJECTED and are never available');
     // audit trail across services: PO_CREATED ... GRN_RECEIVED (procurement), QC_DECIDED (qc) with actors
     const procAudits = (await proc.prisma.outboxEvent.findMany({ where: { tenantId, eventType: EVENT_TYPES.AUDIT_RECORDED } })).map((e) => JSON.stringify(e.envelope));
     for (const action of ['PO_CREATED', 'PO_SUBMITTED', 'PO_APPROVED', 'PO_ISSUED', 'GRN_CREATED', 'GRN_RECEIVED', 'GRN_QC_COMPLETED', 'PO_CLOSED']) assert.ok(procAudits.some((a) => a.includes(`"action":"${action}"`)), action);
@@ -188,24 +214,27 @@ describe('end to end', () => {
 
   it('GRN cancellation reverses stock before inspection and is refused after results are recorded', async () => {
     const p = on(proc.app, owner);
+    let batch = 0;
     const mk = async () => {
-      const po = (await p.post('/api/v1/procurement/purchase-orders', { supplierId, shipToWarehouseId: warehouseId, orderDate: '2026-10-04', lines: [{ itemId: widgetId, orderedQty: 10, unitPrice: 50 }] })).body.data;
+      batch += 1;
+      const serials = Array.from({ length: 10 }, (_, i) => ({ serialNo: `CX${batch}${String(i).padStart(3, '0')}` }));
+      const po = (await p.post('/api/v1/procurement/purchase-orders', { supplierId, shipToWarehouseId: warehouseId, orderDate: '2026-10-04', lines: [{ itemId: dellId, orderedQty: 10, unitPrice: 55000, ...terms }] })).body.data;
       await p.post(`/api/v1/procurement/purchase-orders/${po.id}/submit`);
       await on(proc.app, approver).post(`/api/v1/procurement/purchase-orders/${po.id}/approve`);
       await on(proc.app, approver).post(`/api/v1/procurement/purchase-orders/${po.id}/issue`);
-      const grn = (await p.post('/api/v1/procurement/grns?receive=true', { poId: po.id, receivedDate: '2026-10-04', lines: [{ poLineId: po.lines[0].id, qty: 10 }] }, idem())).body.data;
+      const grn = (await p.post('/api/v1/procurement/grns?receive=true', { poId: po.id, receivedDate: '2026-10-04', lines: [{ poLineId: po.lines[0].id, qty: 10, serials }] }, idem())).body.data;
       await settle();
-      return { po, grn };
+      return { po, grn, serials };
     };
-    const before = await stockOf(widgetId);
+    const before = await stockOf(dellId);
     const clean = await mk();
     assert.equal((await p.get(`/api/v1/procurement/grns/${clean.grn.id}`)).body.data.status, 'QC_PENDING');
-    assert.equal((await stockOf(widgetId)).qcHold, before.qcHold + 10);
+    assert.equal((await stockOf(dellId)).qcHold, before.qcHold + 10);
     assert.equal((await p.post(`/api/v1/procurement/grns/${clean.grn.id}/cancel`, { reason: 'wrong goods' })).body.data.status, 'CANCELLATION_PENDING');
     await settle();
     const cancelled = (await p.get(`/api/v1/procurement/grns/${clean.grn.id}`)).body.data;
     assert.equal(cancelled.status, 'CANCELLED', JSON.stringify(cancelled));
-    assert.equal((await stockOf(widgetId)).qcHold, before.qcHold, 'stock went back to the supplier');
+    assert.equal((await stockOf(dellId)).qcHold, before.qcHold, 'stock went back to the supplier');
     assert.equal((await p.get(`/api/v1/procurement/purchase-orders/${clean.po.id}`)).body.data.status, 'ISSUED');
     const lot = (await on(qc.app, owner).get(`/api/v1/qc/lots?sourceId=${clean.grn.id}`)).body.data[0];
     assert.equal(lot.status, 'CANCELLED');
@@ -213,13 +242,13 @@ describe('end to end', () => {
     const busy = await mk();
     const busyLot = (await on(qc.app, owner).get(`/api/v1/qc/lots?sourceId=${busy.grn.id}`)).body.data[0];
     assert.equal((await on(qc.app, approver).post(`/api/v1/qc/lots/${busyLot.id}/start`)).status, 200);
-    assert.equal((await on(qc.app, approver).put(`/api/v1/qc/lots/${busyLot.id}/results`, { results: [{ result: 'PASS' }] })).status, 200);
+    assert.equal((await on(qc.app, approver).put(`/api/v1/qc/lots/${busyLot.id}/results`, { results: [passed(busy.serials[0].serialNo)] })).status, 200);
     await p.post(`/api/v1/procurement/grns/${busy.grn.id}/cancel`, { reason: 'changed mind' });
     await settle();
     const refused = (await p.get(`/api/v1/procurement/grns/${busy.grn.id}`)).body.data;
     assert.equal(refused.status, 'QC_PENDING');
     assert.match(refused.statusReason, /refused/i);
-    assert.equal((await stockOf(widgetId)).qcHold, before.qcHold + 10, 'nothing moved');
+    assert.equal((await stockOf(dellId)).qcHold, before.qcHold + 10, 'nothing moved');
 
     const report = await inventory.service.reconciliation(tenantId);
     assert.equal(report.ok, true, JSON.stringify(report));

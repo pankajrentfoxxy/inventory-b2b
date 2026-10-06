@@ -17,6 +17,10 @@ export interface PoLineFormValues {
   defaultTaxRate: string;
   isSerialized: boolean;
   receivedQty: number;
+  /** Rental per laptop per month (separate from the purchase rate). */
+  monthlyRentalAmount: string;
+  /** Rental tenure in months. */
+  tenureMonths: string;
   /** Laptop specs of the chosen SKU (read-only display; never sent to the API). */
   specs: LaptopSpecs | null;
 }
@@ -39,7 +43,7 @@ export interface PoFormValues {
 }
 
 export function emptyLine(): PoLineFormValues {
-  return { itemId: '', itemName: '', itemSku: '', unitCode: '', orderedQty: '1', unitPrice: '', taxRate: '', defaultTaxRate: '', isSerialized: false, receivedQty: 0, specs: null };
+  return { itemId: '', itemName: '', itemSku: '', unitCode: '', orderedQty: '1', unitPrice: '', taxRate: '', defaultTaxRate: '', isSerialized: false, receivedQty: 0, monthlyRentalAmount: '', tenureMonths: '', specs: null };
 }
 
 export function lineFromProduct(product: ProductSnapshot, base: PoLineFormValues = emptyLine()): PoLineFormValues {
@@ -79,15 +83,21 @@ export function poToForm(po: PurchaseOrder): PoFormValues {
       defaultTaxRate: l.item.taxRate === null ? '' : String(l.item.taxRate),
       isSerialized: l.item.isSerialized,
       receivedQty: l.receivedQty,
+      ...rentalTermsToForm(l),
       specs: l.item.specs ?? null,
     })),
   };
 }
 
+/** Saved rental terms as form strings (blank on lines created before they existed). */
+export function rentalTermsToForm(l: { monthlyRentalAmount: number | null; tenureMonths: number | null }) {
+  return { monthlyRentalAmount: l.monthlyRentalAmount === null ? '' : String(l.monthlyRentalAmount), tenureMonths: l.tenureMonths === null ? '' : String(l.tenureMonths) };
+}
+
 const num = (v: string) => (v.trim() === '' ? NaN : Number(v));
 
 export function lineToPayload(l: PoLineFormValues): PoLineInput {
-  return { poLineId: l.poLineId, itemId: l.itemId, orderedQty: num(l.orderedQty), unitPrice: num(l.unitPrice), taxRate: l.taxRate.trim() === '' ? null : num(l.taxRate) };
+  return { poLineId: l.poLineId, itemId: l.itemId, orderedQty: num(l.orderedQty), unitPrice: num(l.unitPrice), taxRate: l.taxRate.trim() === '' ? null : num(l.taxRate), monthlyRentalAmount: num(l.monthlyRentalAmount), tenureMonths: num(l.tenureMonths) };
 }
 
 export function formToPayload(v: PoFormValues): PoInput {

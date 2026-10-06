@@ -12,7 +12,7 @@ import { uuidv7, type EventEnvelope } from '@b2b/platform-kit';
 import { tenantToken, type InMemoryBroker } from '@b2b/test-kit';
 import { PO_COMMANDS, PO_TRANSITIONS, type PoCommand } from '../src/modules/procurement.service.js';
 import type { ProcurementRuntime } from '../src/service.js';
-import { FakeSources, api, bootRuntime, idem, product, supplier, warehouse } from './support.js';
+import { FakeSources, LAPTOP_SPECS, api, bootRuntime, idem, product, supplier, warehouse } from './support.js';
 
 let rt: ProcurementRuntime;
 let broker: InMemoryBroker;
@@ -30,14 +30,16 @@ const wh2 = warehouse(tenantA, { code: 'SECOND', stateCode: '29' });
 const widget = product(tenantA, { sku: 'WIDGET' });
 const phone = product(tenantA, { sku: 'PHONE', isSerialized: true, serialPattern: '^SN[0-9]{4}$' });
 const archived = product(tenantA, { sku: 'OLD', status: 'ARCHIVED' });
+const generic = product(tenantA, { sku: 'CABLE', specs: null });
+const foreignLaptop = product(tenantB, { sku: 'B-LAPTOP' });
 const sup = supplier(tenantA);
 const blocked = supplier(tenantA, { displayName: 'Blocked Co', status: 'BLOCKED', blockedReason: 'quality' });
 const scoped = tenantToken({ tenantId: tenantA, perms: ['purchase.view', 'grn.view', 'grn.create'], warehouseIds: [wh2.id] });
 
-const poBody = (over: Record<string, unknown> = {}) => ({ supplierId: sup.id, shipToWarehouseId: wh.id, orderDate: '2026-10-01', lines: [{ itemId: widget.id, orderedQty: 10, unitPrice: 100 }], ...over });
+const poBody = (over: Record<string, unknown> = {}) => ({ supplierId: sup.id, shipToWarehouseId: wh.id, orderDate: '2026-10-01', lines: [{ itemId: widget.id, orderedQty: 10, unitPrice: 100, monthlyRentalAmount: 2500, tenureMonths: 12 }], ...over });
 const envelope = (tenantId: string, eventType: string, payload: Record<string, unknown>): EventEnvelope => ({ eventId: uuidv7(), eventType, eventVersion: 1, occurredAt: new Date().toISOString(), tenantId, producer: 'svc-inventory', correlationId: 'c', causationId: null, actor: { type: 'system', id: null }, aggregate: { type: 'grn', id: randomUUID(), version: null }, payload });
 
-async function issuedPo(lines = [{ itemId: widget.id, orderedQty: 10, unitPrice: 100 }]) {
+async function issuedPo(lines = [{ itemId: widget.id, orderedQty: 10, unitPrice: 100, monthlyRentalAmount: 2500, tenureMonths: 12 }]) {
   const created = await api(rt, executive).post('/api/v1/procurement/purchase-orders', poBody({ lines }));
   assert.equal(created.status, 201, JSON.stringify(created.body));
   const id = created.body.data.id as string;
@@ -49,7 +51,7 @@ async function issuedPo(lines = [{ itemId: widget.id, orderedQty: 10, unitPrice:
 }
 
 before(async () => {
-  for (const p of [widget, phone, archived]) sources.products.set(p.id, p);
+  for (const p of [widget, phone, archived, generic, foreignLaptop]) sources.products.set(p.id, p);
   sources.warehouses.set(wh.id, wh);
   sources.warehouses.set(wh2.id, wh2);
   sources.suppliers.set(sup.id, sup);
@@ -62,7 +64,7 @@ after(async () => {
 
 describe('purchase orders', () => {
   it('creates with snapshots and shared totals, edits drafts with If-Match, and walks approve -> issue', async () => {
-    const created = await api(rt, executive).post('/api/v1/procurement/purchase-orders', poBody({ lines: [{ itemId: widget.id, orderedQty: 10, unitPrice: 100 }, { itemId: phone.id, orderedQty: 2, unitPrice: 8000 }] }));
+    const created = await api(rt, executive).post('/api/v1/procurement/purchase-orders', poBody({ lines: [{ itemId: widget.id, orderedQty: 10, unitPrice: 100, monthlyRentalAmount: 2500, tenureMonths: 12 }, { itemId: phone.id, orderedQty: 2, unitPrice: 8000, monthlyRentalAmount: 2500, tenureMonths: 12 }] }));
     assert.equal(created.status, 201, JSON.stringify(created.body));
     const po = created.body.data;
     assert.match(po.number, /^PO\/\d{2}-\d{2}\/0001$/);
@@ -89,7 +91,7 @@ describe('purchase orders', () => {
     const badSupplier = await api(rt, executive).post('/api/v1/procurement/purchase-orders', poBody({ supplierId: blocked.id }));
     assert.equal(badSupplier.status, 422);
     assert.equal(badSupplier.body.error.code, 'PO_SUPPLIER_BLOCKED');
-    const badItem = await api(rt, executive).post('/api/v1/procurement/purchase-orders', poBody({ lines: [{ itemId: archived.id, orderedQty: 1, unitPrice: 1 }] }));
+    const badItem = await api(rt, executive).post('/api/v1/procurement/purchase-orders', poBody({ lines: [{ itemId: archived.id, orderedQty: 1, unitPrice: 1, monthlyRentalAmount: 2500, tenureMonths: 12 }] }));
     assert.equal(badItem.body.error.code, 'PO_ITEM_INACTIVE');
     const unknownSupplier = await api(rt, executive).post('/api/v1/procurement/purchase-orders', poBody({ supplierId: randomUUID() }));
     assert.equal(unknownSupplier.status, 422);
@@ -102,6 +104,16 @@ describe('purchase orders', () => {
     assert.equal(self.status, 409);
     assert.equal(self.body.error.code, 'PO_SELF_APPROVAL');
     assert.equal((await api(rt, executive).post(`/api/v1/procurement/purchase-orders/${po.id}/approve`)).status, 403);
+    // an administrator (settings.manage) who submitted may approve; the audit flags the self-approval
+    const adminId = randomUUID();
+    const admin = tenantToken({ tenantId: tenantA, userId: adminId, name: 'Admin', perms: ['purchase.view', 'purchase.create', 'purchase.approve', 'settings.manage'] });
+    const own = (await api(rt, admin).post('/api/v1/procurement/purchase-orders', poBody())).body.data;
+    assert.equal((await api(rt, admin).post(`/api/v1/procurement/purchase-orders/${own.id}/submit`)).status, 200);
+    const selfApproved = await api(rt, admin).post(`/api/v1/procurement/purchase-orders/${own.id}/approve`);
+    assert.equal(selfApproved.status, 200, JSON.stringify(selfApproved.body));
+    assert.equal(selfApproved.body.data.approvedBy, adminId);
+    const ownAudit = (await rt.prisma.outboxEvent.findMany({ where: { tenantId: tenantA, eventType: EVENT_TYPES.AUDIT_RECORDED, aggregateId: own.id } })).map((e) => JSON.stringify(e.envelope));
+    assert.ok(ownAudit.some((a) => a.includes('"action":"PO_APPROVED"') && a.includes('"selfApproved":true')), 'self-approval is visible in the audit trail');
     const rejected = await api(rt, approver).post(`/api/v1/procurement/purchase-orders/${po.id}/reject`, { reason: 'price too high' });
     assert.equal(rejected.body.data.status, 'DRAFT');
     assert.equal(rejected.body.data.statusReason, 'price too high');
@@ -126,7 +138,7 @@ describe('purchase orders', () => {
 
   it('rejects every command from a status outside the transition table', async () => {
     const draft = (await api(rt, executive).post('/api/v1/procurement/purchase-orders', poBody())).body.data;
-    const bodies: Record<PoCommand, Record<string, unknown>> = { submit: {}, approve: {}, reject: { reason: 'not needed' }, issue: {}, revise: { reason: 'because', lines: [{ itemId: widget.id, orderedQty: 1, unitPrice: 1 }] }, cancel: {}, 'short-close': { reason: 'done' }, close: {} };
+    const bodies: Record<PoCommand, Record<string, unknown>> = { submit: {}, approve: {}, reject: { reason: 'not needed' }, issue: {}, revise: { reason: 'because', lines: [{ itemId: widget.id, orderedQty: 1, unitPrice: 1, monthlyRentalAmount: 2500, tenureMonths: 12 }] }, cancel: {}, 'short-close': { reason: 'done' }, close: {} };
     for (const command of PO_COMMANDS) {
       if (PO_TRANSITIONS[command].includes('DRAFT')) continue;
       const res = await api(rt, owner).post(`/api/v1/procurement/purchase-orders/${draft.id}/${command}`, bodies[command]);
@@ -141,24 +153,65 @@ describe('purchase orders', () => {
     }
   });
 
+  it('orders exact laptop configurations: laptop-only, tenant-scoped, one line per configuration, rental terms required', async () => {
+    const line = (over: Record<string, unknown> = {}) => ({ itemId: widget.id, orderedQty: 10, unitPrice: 55000, monthlyRentalAmount: 3500, tenureMonths: 12, ...over });
+    const post = (lines: unknown[]) => api(rt, executive).post('/api/v1/procurement/purchase-orders', poBody({ lines }));
+
+    // the laptop is resolved server side: specs come from master, never from the client
+    const created = await post([line({ specs: { brand: 'Fake' } }), line({ itemId: phone.id, orderedQty: 5, unitPrice: 62000, monthlyRentalAmount: 4000, tenureMonths: 24 })]);
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const po = created.body.data;
+    assert.deepEqual(po.lines[0].item.specs, LAPTOP_SPECS);
+    assert.deepEqual(po.lines.map((l: { orderedQty: number; unitPrice: number; monthlyRentalAmount: number; tenureMonths: number }) => [l.orderedQty, l.unitPrice, l.monthlyRentalAmount, l.tenureMonths]), [[10, 55000, 3500, 12], [5, 62000, 4000, 24]]);
+    assert.equal(po.subtotal, 860000, 'rental terms are not part of the purchase totals');
+
+    const generic_ = await post([line({ itemId: generic.id })]);
+    assert.equal(generic_.status, 422);
+    assert.equal(generic_.body.error.code, 'PO_ITEM_NOT_LAPTOP');
+    assert.equal(generic_.body.errors['lines.0.itemId'], 'CABLE is not a laptop configuration');
+    const foreign = await post([line({ itemId: foreignLaptop.id })]);
+    assert.equal(foreign.status, 422, 'another tenant\'s laptop is unknown here');
+    assert.equal(foreign.body.errors['lines.0.itemId'], 'Select a valid laptop');
+    const duplicate = await post([line(), line({ orderedQty: 5 })]);
+    assert.equal(duplicate.status, 422);
+    assert.equal(duplicate.body.error.code, 'PO_DUPLICATE_LINE');
+    assert.match(duplicate.body.errors['lines.1.itemId'], /already on line 1/);
+
+    for (const [over, path] of [[{ monthlyRentalAmount: undefined }, 'monthlyRentalAmount'], [{ monthlyRentalAmount: -1 }, 'monthlyRentalAmount'], [{ tenureMonths: undefined }, 'tenureMonths'], [{ tenureMonths: 0 }, 'tenureMonths'], [{ tenureMonths: 6.5 }, 'tenureMonths'], [{ orderedQty: 2.5 }, 'orderedQty'], [{ orderedQty: 0 }, 'orderedQty'], [{ unitPrice: -5 }, 'unitPrice']] as const) {
+      const res = await post([line(over)]);
+      assert.equal(res.status, 422, `${JSON.stringify(over)} -> ${JSON.stringify(res.body)}`);
+      assert.ok(res.body.errors[`lines.0.${path}`], `${path}: ${JSON.stringify(res.body.errors)}`);
+    }
+
+    // header-only edits keep the lines and their rental terms; line edits replace them
+    const header = await api(rt, executive).patch(`/api/v1/procurement/purchase-orders/${po.id}`, { notes: 'deliver by Friday' }, 0);
+    assert.equal(header.status, 200, JSON.stringify(header.body));
+    assert.deepEqual([header.body.data.lines[1].monthlyRentalAmount, header.body.data.lines[1].tenureMonths], [4000, 24]);
+    const dupEdit = await api(rt, executive).patch(`/api/v1/procurement/purchase-orders/${po.id}`, { lines: [line(), line()] }, 1);
+    assert.equal(dupEdit.body.error.code, 'PO_DUPLICATE_LINE');
+    const edited = await api(rt, executive).patch(`/api/v1/procurement/purchase-orders/${po.id}`, { lines: [line({ monthlyRentalAmount: 3200.5, tenureMonths: 36 })] }, 1);
+    assert.equal(edited.status, 200, JSON.stringify(edited.body));
+    assert.deepEqual([edited.body.data.lines.length, edited.body.data.lines[0].monthlyRentalAmount, edited.body.data.lines[0].tenureMonths], [1, 3200.5, 36]);
+  });
+
   it('revises issued orders under the received-line rules and re-approves', async () => {
-    const po = await issuedPo([{ itemId: widget.id, orderedQty: 10, unitPrice: 100 }, { itemId: phone.id, orderedQty: 2, unitPrice: 8000 }]);
+    const po = await issuedPo([{ itemId: widget.id, orderedQty: 10, unitPrice: 100, monthlyRentalAmount: 2500, tenureMonths: 12 }, { itemId: phone.id, orderedQty: 2, unitPrice: 8000, monthlyRentalAmount: 2500, tenureMonths: 12 }]);
     const widgetLine = po.lines.find((l) => l.itemId === widget.id)!;
     const phoneLine = po.lines.find((l) => l.itemId === phone.id)!;
     const grn = await api(rt, approver).post('/api/v1/procurement/grns?receive=true', { poId: po.id, receivedDate: '2026-10-02', lines: [{ poLineId: widgetLine.id, qty: 4 }] }, idem());
     assert.equal(grn.status, 201, JSON.stringify(grn.body));
-    const inFlight = await api(rt, executive).post(`/api/v1/procurement/purchase-orders/${po.id}/revise`, { reason: 'more', lines: [{ poLineId: widgetLine.id, itemId: widget.id, orderedQty: 12, unitPrice: 100 }] });
+    const inFlight = await api(rt, executive).post(`/api/v1/procurement/purchase-orders/${po.id}/revise`, { reason: 'more', lines: [{ poLineId: widgetLine.id, itemId: widget.id, orderedQty: 12, unitPrice: 100, monthlyRentalAmount: 2500, tenureMonths: 12 }] });
     assert.equal(inFlight.status, 409, 'receipt not yet posted to inventory');
     await broker.publish(rk(EVENT_TYPES.INVENTORY_RECEIPT_POSTED), envelope(tenantA, EVENT_TYPES.INVENTORY_RECEIPT_POSTED, { grnId: grn.body.data.id, postingId: randomUUID(), warehouseId: wh.id, lines: [] }));
     await broker.drain();
-    const below = await api(rt, executive).post(`/api/v1/procurement/purchase-orders/${po.id}/revise`, { reason: 'less', lines: [{ poLineId: widgetLine.id, itemId: widget.id, orderedQty: 3, unitPrice: 100 }, { poLineId: phoneLine.id, itemId: phone.id, orderedQty: 2, unitPrice: 8000 }] });
+    const below = await api(rt, executive).post(`/api/v1/procurement/purchase-orders/${po.id}/revise`, { reason: 'less', lines: [{ poLineId: widgetLine.id, itemId: widget.id, orderedQty: 3, unitPrice: 100, monthlyRentalAmount: 2500, tenureMonths: 12 }, { poLineId: phoneLine.id, itemId: phone.id, orderedQty: 2, unitPrice: 8000, monthlyRentalAmount: 2500, tenureMonths: 12 }] });
     assert.equal(below.status, 422);
     assert.equal(below.body.error.code, 'PO_LINE_IMMUTABLE');
-    const swap = await api(rt, executive).post(`/api/v1/procurement/purchase-orders/${po.id}/revise`, { reason: 'swap', lines: [{ poLineId: widgetLine.id, itemId: phone.id, orderedQty: 10, unitPrice: 100 }] });
+    const swap = await api(rt, executive).post(`/api/v1/procurement/purchase-orders/${po.id}/revise`, { reason: 'swap', lines: [{ poLineId: widgetLine.id, itemId: phone.id, orderedQty: 10, unitPrice: 100, monthlyRentalAmount: 2500, tenureMonths: 12 }] });
     assert.equal(swap.body.error.code, 'PO_LINE_IMMUTABLE');
-    const removeReceived = await api(rt, executive).post(`/api/v1/procurement/purchase-orders/${po.id}/revise`, { reason: 'drop', lines: [{ poLineId: phoneLine.id, itemId: phone.id, orderedQty: 2, unitPrice: 8000 }] });
+    const removeReceived = await api(rt, executive).post(`/api/v1/procurement/purchase-orders/${po.id}/revise`, { reason: 'drop', lines: [{ poLineId: phoneLine.id, itemId: phone.id, orderedQty: 2, unitPrice: 8000, monthlyRentalAmount: 2500, tenureMonths: 12 }] });
     assert.equal(removeReceived.body.error.code, 'PO_LINE_IMMUTABLE');
-    const ok = await api(rt, executive).post(`/api/v1/procurement/purchase-orders/${po.id}/revise`, { reason: 'more widgets, phones dropped', lines: [{ poLineId: widgetLine.id, itemId: widget.id, orderedQty: 12, unitPrice: 100 }] });
+    const ok = await api(rt, executive).post(`/api/v1/procurement/purchase-orders/${po.id}/revise`, { reason: 'more widgets, phones dropped', lines: [{ poLineId: widgetLine.id, itemId: widget.id, orderedQty: 12, unitPrice: 100, monthlyRentalAmount: 2500, tenureMonths: 12 }] });
     assert.equal(ok.status, 200, JSON.stringify(ok.body));
     assert.equal(ok.body.data.status, 'PENDING_APPROVAL');
     assert.equal(ok.body.data.revision, 1);
@@ -179,7 +232,7 @@ describe('purchase orders', () => {
 
 describe('goods receipts', () => {
   it('guards over-receipt (sequential, concurrent, tolerance), duplicate keys, serial rules and warehouse scope', async () => {
-    const po = await issuedPo([{ itemId: widget.id, orderedQty: 10, unitPrice: 100 }, { itemId: phone.id, orderedQty: 3, unitPrice: 8000 }]);
+    const po = await issuedPo([{ itemId: widget.id, orderedQty: 10, unitPrice: 100, monthlyRentalAmount: 2500, tenureMonths: 12 }, { itemId: phone.id, orderedQty: 3, unitPrice: 8000, monthlyRentalAmount: 2500, tenureMonths: 12 }]);
     const widgetLine = po.lines.find((l) => l.itemId === widget.id)!;
     const phoneLine = po.lines.find((l) => l.itemId === phone.id)!;
     const receivable = await api(rt, approver).get(`/api/v1/procurement/purchase-orders/${po.id}/receivable-lines`);
@@ -234,7 +287,7 @@ describe('goods receipts', () => {
 
     // tolerance setting on a fresh PO
     await api(rt, owner).put('/api/v1/procurement/settings', { overReceiptTolerancePct: 10 });
-    const po2 = await issuedPo([{ itemId: widget.id, orderedQty: 10, unitPrice: 100 }]);
+    const po2 = await issuedPo([{ itemId: widget.id, orderedQty: 10, unitPrice: 100, monthlyRentalAmount: 2500, tenureMonths: 12 }]);
     const tol = await api(rt, approver).post('/api/v1/procurement/grns?receive=true', { poId: po2.id, receivedDate: '2026-10-02', lines: [{ poLineId: po2.lines[0].id, qty: 11 }] }, idem());
     assert.equal(tol.status, 201, JSON.stringify(tol.body));
     assert.equal((await api(rt, approver).post('/api/v1/procurement/grns?receive=true', { poId: po2.id, receivedDate: '2026-10-02', lines: [{ poLineId: po2.lines[0].id, qty: 0.5 }] }, idem())).body.error.code, 'PO_NOT_RECEIVABLE');
@@ -244,7 +297,7 @@ describe('goods receipts', () => {
   });
 
   it('follows inventory and QC events: QC_PENDING, POSTING_FAILED + retry, QC_COMPLETED, auto-close, cancellation saga', async () => {
-    const po = await issuedPo([{ itemId: widget.id, orderedQty: 10, unitPrice: 100 }]);
+    const po = await issuedPo([{ itemId: widget.id, orderedQty: 10, unitPrice: 100, monthlyRentalAmount: 2500, tenureMonths: 12 }]);
     const line = po.lines[0];
     const grn = (await api(rt, approver).post('/api/v1/procurement/grns?receive=true', { poId: po.id, receivedDate: '2026-10-02', lines: [{ poLineId: line.id, qty: 10 }] }, idem())).body.data;
     assert.equal(grn.status, 'RECEIVED');
@@ -284,7 +337,7 @@ describe('goods receipts', () => {
     assert.equal((await api(rt, approver).post(`/api/v1/procurement/grns/${grn.id}/cancel`, { reason: 'late' })).body.error.code, 'GRN_NOT_CANCELLABLE');
 
     // saga: cancel a QC_PENDING receipt, refusal, then success
-    const po2 = await issuedPo([{ itemId: widget.id, orderedQty: 10, unitPrice: 100 }]);
+    const po2 = await issuedPo([{ itemId: widget.id, orderedQty: 10, unitPrice: 100, monthlyRentalAmount: 2500, tenureMonths: 12 }]);
     const grn2 = (await api(rt, approver).post('/api/v1/procurement/grns?receive=true', { poId: po2.id, receivedDate: '2026-10-03', lines: [{ poLineId: po2.lines[0].id, qty: 4 }] }, idem())).body.data;
     await broker.publish(rk(EVENT_TYPES.INVENTORY_RECEIPT_POSTED), envelope(tenantA, EVENT_TYPES.INVENTORY_RECEIPT_POSTED, { grnId: grn2.id, postingId: randomUUID(), warehouseId: wh.id, lines: [] }));
     await broker.drain();

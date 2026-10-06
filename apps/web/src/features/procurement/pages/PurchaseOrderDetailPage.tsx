@@ -36,7 +36,7 @@ function Overview({ po }: { po: PurchaseOrderDetail }) {
               {[l.item.hsnCode ? `HSN ${l.item.hsnCode}` : null, l.item.isSerialized ? 'serialized' : null].filter(Boolean).join(' - ')}
             </p>
           ) : null}
-          <LineSpecs specs={l.item.specs} className="mt-1" />
+          <LineSpecs specs={l.item.specs} defaultOpen className="mt-1" />
         </div>
       ),
     },
@@ -44,7 +44,9 @@ function Overview({ po }: { po: PurchaseOrderDetail }) {
     { key: 'received', header: 'Received', align: 'right', hideBelow: 'md', render: (l) => <span className={l.receivedQty > 0 ? 'tabular text-emerald-700' : 'tabular text-slate-400'}>{formatQty(l.receivedQty)}</span> },
     { key: 'remaining', header: 'Remaining', align: 'right', hideBelow: 'md', render: (l) => <span className="tabular">{formatQty(l.remainingQty)}{l.cancelledQty > 0 ? <span className="text-xs text-slate-400"> ({formatQty(l.cancelledQty)} cancelled)</span> : null}</span> },
     { key: 'progress', header: 'Progress', hideBelow: 'lg', render: (l) => <ProgressBar value={l.receivedQty} total={l.orderedQty} /> },
-    { key: 'price', header: 'Unit price', align: 'right', render: (l) => <span className="tabular">{formatMoney(l.unitPrice, po.currency)}</span> },
+    { key: 'price', header: 'Rate', align: 'right', render: (l) => <span className="tabular">{formatMoney(l.unitPrice, po.currency)}</span> },
+    { key: 'rental', header: 'Monthly rental', align: 'right', render: (l) => (l.monthlyRentalAmount === null ? <span className="text-slate-300">-</span> : <span className="tabular">{formatMoney(l.monthlyRentalAmount, po.currency)}</span>) },
+    { key: 'tenure', header: 'Tenure', align: 'right', render: (l) => (l.tenureMonths === null ? <span className="text-slate-300">-</span> : <span className="tabular whitespace-nowrap">{l.tenureMonths} months</span>) },
     { key: 'tax', header: 'GST', align: 'right', hideBelow: 'md', render: (l) => <span className="text-slate-600 text-xs tabular">{l.taxRate}%</span> },
     { key: 'total', header: 'Line total', align: 'right', render: (l) => <span className="tabular font-medium">{formatMoney(l.lineTotal, po.currency)}</span> },
   ];
@@ -99,7 +101,7 @@ function Overview({ po }: { po: PurchaseOrderDetail }) {
       </div>
 
       <Card className="overflow-hidden">
-        <CardHeader title="Laptops ordered" description={`${po.lines.length} line${po.lines.length === 1 ? '' : 's'} - expand a line to see all specifications`} />
+        <CardHeader title="Laptops ordered" description={`${po.lines.length} laptop configuration${po.lines.length === 1 ? '' : 's'} with the specifications as ordered`} />
         <DataTable columns={columns} rows={po.lines} rowKey={(l) => l.id} empty={<EmptyState title="No lines" />} dense />
       </Card>
 

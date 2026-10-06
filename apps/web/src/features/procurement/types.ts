@@ -118,6 +118,10 @@ export interface PoLine {
   taxableAmount: number;
   taxAmount: number;
   lineTotal: number;
+  /** Rental per laptop per month; null on lines created before rental terms existed. */
+  monthlyRentalAmount: number | null;
+  /** Rental tenure in months; null on older lines. */
+  tenureMonths: number | null;
 }
 
 export interface PurchaseOrder {
@@ -201,6 +205,8 @@ export interface PoLineInput {
   orderedQty: number;
   unitPrice: number;
   taxRate?: number | null;
+  monthlyRentalAmount: number;
+  tenureMonths: number;
 }
 export interface PoInput {
   supplierId: string;

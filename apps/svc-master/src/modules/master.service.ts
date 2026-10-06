@@ -304,6 +304,7 @@ export class MasterService {
     if (q.isSerialized) where.isSerialized = q.isSerialized === 'true';
     if (q.trackInventory) where.trackInventory = q.trackInventory === 'true';
     if (q.laptop) where.configKey = q.laptop === 'true' ? { not: null } : null;
+    if (q.laptop) where.configKey = q.laptop === 'true' ? { not: null } : null;
     for (const k of SPEC_ID_KEYS) {
       const v = (q as Record<string, unknown>)[k];
       if (typeof v === 'string') (where as Record<string, unknown>)[SPEC_COLUMNS[k].column] = v;
@@ -316,10 +317,15 @@ export class MasterService {
     return { data: page.map((p) => this.serializeProduct(p)), nextCursor: rows.length > q.limit && last ? encodeCursor([last.name, last.id]) : null };
   }
 
-  async lookupProducts(tenantId: string, q: { q?: string; status?: string; trackInventory?: string }) {
+  async lookupProducts(tenantId: string, q: { q?: string; status?: string; trackInventory?: string; laptop?: string }) {
     const where: Prisma.ProductWhereInput = { tenantId, status: q.status ?? 'ACTIVE' };
     if (q.trackInventory) where.trackInventory = q.trackInventory === 'true';
-    if (q.q) where.OR = [{ name: { contains: q.q, mode: 'insensitive' } }, { sku: { contains: q.q, mode: 'insensitive' } }];
+    if (q.laptop) where.configKey = q.laptop === 'true' ? { not: null } : null;
+    if (q.q) {
+      // laptop configurations also match on their spec values ("i7", "16 GB", "Iris Xe")
+      const specPaths = ['generation', 'processor', 'ram', 'ssd', 'gpu', 'screenSize'];
+      where.OR = [{ name: { contains: q.q, mode: 'insensitive' } }, { sku: { contains: q.q, mode: 'insensitive' } }, ...specPaths.map((p) => ({ specs: { path: [p], string_contains: q.q } }))];
+    }
     const rows = await this.tx(tenantId, (tx) => tx.product.findMany({ where, include: productInclude, orderBy: { name: 'asc' }, take: 20 }));
     return rows.map((p) => this.snapshot(p));
   }

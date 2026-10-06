@@ -78,7 +78,7 @@ export function PurchaseOrderForm({ initial, editing }: { initial: PoFormValues;
         </Card>
 
         <Card>
-          <CardHeader title="Lines" description="Tax rate defaults from the product; override it per line for concessional supplies." />
+          <CardHeader title="Laptops" description="One line per laptop configuration. Specifications come from the laptop master; enter quantity, rate and rental terms. GST defaults from the laptop and can be overridden for concessional supplies." />
           <CardBody>
             <PoLineItems totals={totals} />
           </CardBody>

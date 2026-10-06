@@ -28,11 +28,15 @@ export function SupplierPicker({ value, onChange, selectedLabel, error, disabled
   );
 }
 
-/** Laptop (SKU) typeahead over GET /v1/master/lookups/products?status=ACTIVE. Options read "SKU - Name" with the spec summary below. */
-export function ProductPicker({ value, onChange, selectedLabel, error, disabled, placeholder = 'Search laptops by SKU, model or spec', size }: { value: string; onChange: (id: string, product: ProductSnapshot | null) => void; selectedLabel?: string; error?: boolean; disabled?: boolean; placeholder?: string; size?: 'sm' | 'md' }) {
+/**
+ * Laptop configuration typeahead over GET /v1/master/lookups/products?status=ACTIVE&laptop=true
+ * (searches name, SKU and spec values). Options read "Dell Latitude 5440" with "SKU - specs" below.
+ * `excludeIds` hides configurations already on other lines (one line per configuration).
+ */
+export function ProductPicker({ value, onChange, selectedLabel, error, disabled, placeholder = 'Select laptop', size, excludeIds = [] }: { value: string; onChange: (id: string, product: ProductSnapshot | null) => void; selectedLabel?: string; error?: boolean; disabled?: boolean; placeholder?: string; size?: 'sm' | 'md'; excludeIds?: string[] }) {
   const [term, setTerm] = useState('');
   const products = useProductLookup(useDebouncedValue(term, 250));
-  const rows = products.data ?? [];
+  const rows = (products.data ?? []).filter((p) => p.id === value || !excludeIds.includes(p.id));
   return (
     <SearchSelect
       value={value}
@@ -47,8 +51,8 @@ export function ProductPicker({ value, onChange, selectedLabel, error, disabled,
       emptyText={products.isError ? 'Could not load laptops' : term ? `No laptops match "${term}"` : 'No active laptop configurations'}
       options={rows.map((p) => ({
         value: p.id,
-        label: `${p.sku} - ${p.name}`,
-        description: specsSummary(p.specs) || [p.taxRate !== null ? `GST ${p.taxRate}%` : 'No tax', p.isSerialized ? 'Serialized' : null].filter(Boolean).join(' - '),
+        label: p.name,
+        description: [p.sku, specsSummary(p.specs)].filter(Boolean).join(' - '),
       }))}
     />
   );

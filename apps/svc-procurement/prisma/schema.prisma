@@ -78,6 +78,10 @@ model PoLine {
   taxableAmount Decimal @default(0) @map("taxable_amount") @db.Decimal(18, 2)
   taxAmount     Decimal @default(0) @map("tax_amount") @db.Decimal(18, 2)
   lineTotal     Decimal @default(0) @map("line_total") @db.Decimal(18, 2)
+  /// Rental commercials of the laptop configuration (informational; not part of the PO totals).
+  /// Required by the API; null only on lines created before they existed.
+  monthlyRentalAmount Decimal? @map("monthly_rental_amount") @db.Decimal(18, 2)
+  tenureMonths        Int?     @map("tenure_months")
 
   po       PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
   grnLines GrnLine[]

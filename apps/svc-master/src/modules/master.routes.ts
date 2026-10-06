@@ -11,7 +11,7 @@ export interface MasterRouterDeps {
   logger: Logger;
 }
 
-const lookupQuery = z.object({ q: z.string().trim().max(100).optional(), status: z.enum(['DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED']).optional(), trackInventory: z.enum(['true', 'false']).optional() });
+const lookupQuery = z.object({ q: z.string().trim().max(100).optional(), status: z.enum(['DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED']).optional(), trackInventory: z.enum(['true', 'false']).optional(), laptop: z.enum(['true', 'false']).optional() });
 const statusBody = z.object({ status: z.enum(['ACTIVE', 'INACTIVE', 'ARCHIVED']) });
 const whStatusBody = z.object({ status: z.enum(['ACTIVE', 'INACTIVE']) });
 const includeInactive = z.object({ includeInactive: z.enum(['true', 'false']).optional() });

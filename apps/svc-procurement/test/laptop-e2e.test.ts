@@ -129,7 +129,7 @@ describe('laptop flow', () => {
     const p = on(proc.app, owner);
 
     // Purchase order: select the SKU; specs come from the configuration
-    const created = await p.post('/api/v1/procurement/purchase-orders', { supplierId, shipToWarehouseId: warehouseId, orderDate: '2026-10-01', lines: [{ itemId: laptopId, orderedQty: 10, unitPrice: 55000 }] });
+    const created = await p.post('/api/v1/procurement/purchase-orders', { supplierId, shipToWarehouseId: warehouseId, orderDate: '2026-10-01', lines: [{ itemId: laptopId, orderedQty: 10, unitPrice: 55000, monthlyRentalAmount: 2500, tenureMonths: 12 }] });
     assert.equal(created.status, 201, JSON.stringify(created.body));
     const po = created.body.data;
     assert.equal(po.lines[0].item.sku, 'DELL-LAT5440-I5-16-512');

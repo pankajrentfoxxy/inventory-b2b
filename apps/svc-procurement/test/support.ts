@@ -35,9 +35,12 @@ export class FakeSources implements ProcurementSources {
   };
 }
 
+export const LAPTOP_SPECS = { brand: 'Dell', model: 'Latitude 5440', generation: '13th Gen', processor: 'Intel Core i5-1345U', ram: '16 GB', ssd: '512 GB', gpu: 'Intel Iris Xe', screenSize: '14"' };
+
+/** A laptop configuration snapshot as svc-master returns it; pass `specs: null` for a non-laptop product. */
 export function product(tenantId: string, over: Partial<ProductSnapshot> = {}): ProductSnapshot {
   const id = over.id ?? randomUUID();
-  return { id, tenantId, sku: `SKU-${id.slice(0, 6).toUpperCase()}`, name: `Product ${id.slice(0, 4)}`, type: 'GOODS', trackInventory: true, isSerialized: false, requiresImei: false, serialPattern: null, qcRequired: true, unitCode: 'PCS', hsnCode: '8471', taxRate: 18, status: 'ACTIVE', version: 0, ...over };
+  return { id, tenantId, sku: `SKU-${id.slice(0, 6).toUpperCase()}`, name: `Product ${id.slice(0, 4)}`, type: 'GOODS', trackInventory: true, isSerialized: false, requiresImei: false, serialPattern: null, qcRequired: true, unitCode: 'PCS', hsnCode: '8471', taxRate: 18, status: 'ACTIVE', version: 0, specs: LAPTOP_SPECS, ...over };
 }
 export function warehouse(tenantId: string, over: Partial<WarehouseSnapshot> = {}): WarehouseSnapshot {
   const id = over.id ?? randomUUID();

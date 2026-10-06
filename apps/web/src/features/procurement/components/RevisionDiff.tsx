@@ -10,6 +10,12 @@ interface DiffRow {
   after: PoLine | null;
 }
 
+/** "INR 3,500.00 x 12 months"; snapshots from before rental terms existed have none. */
+function rentalTerms(l: PoLine, currency?: string): string {
+  if (l.monthlyRentalAmount === null || l.monthlyRentalAmount === undefined || l.tenureMonths === null || l.tenureMonths === undefined) return '';
+  return `${formatMoney(l.monthlyRentalAmount, currency)} x ${l.tenureMonths} months`;
+}
+
 /** Match lines by id (revisions keep ids for kept lines); fall back to itemId for lines that were replaced. */
 export function diffLines(before: PoLine[], after: PoLine[]): DiffRow[] {
   const rows: DiffRow[] = [];
@@ -21,7 +27,7 @@ export function diffLines(before: PoLine[], after: PoLine[]): DiffRow[] {
       continue;
     }
     seenAfter.add(a.id);
-    const changed = a.orderedQty !== b.orderedQty || a.unitPrice !== b.unitPrice || a.taxRate !== b.taxRate || a.itemId !== b.itemId;
+    const changed = a.orderedQty !== b.orderedQty || a.unitPrice !== b.unitPrice || a.taxRate !== b.taxRate || a.itemId !== b.itemId || rentalTerms(a) !== rentalTerms(b);
     rows.push({ key: b.id, change: changed ? 'changed' : 'same', before: b, after: a });
   }
   for (const a of after) if (!seenAfter.has(a.id) && !rows.some((r) => r.after?.id === a.id)) rows.push({ key: a.id, change: 'added', before: null, after: a });
@@ -91,6 +97,16 @@ export function RevisionDiff({ snapshot, current }: { snapshot: PurchaseOrder; c
                   <td className="px-3 py-2">
                     <p className={cn('font-medium text-slate-900', r.change === 'removed' && 'line-through text-slate-500')}>{item.name}</p>
                     <p className="text-xs font-mono text-slate-500">{item.sku}</p>
+                    {(() => {
+                      const before = r.before ? rentalTerms(r.before, currency) : '';
+                      const after = r.after ? rentalTerms(r.after, currency) : '';
+                      if (!before && !after) return null;
+                      return (
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Rental: {before === after || !r.before || !r.after ? after || before : <><span className="line-through">{before || '-'}</span> to <span className="font-medium text-slate-700">{after || '-'}</span></>}
+                        </p>
+                      );
+                    })()}
                   </td>
                   <td className="px-3 py-2 text-right border-l border-slate-100">
                     <Cell value={r.before?.orderedQty} other={r.after?.orderedQty} format={formatQty} />

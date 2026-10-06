@@ -38,7 +38,8 @@ export const procurementApi = {
 /** Lookups owned by other services; called directly so this module does not import other features. */
 export const lookupApi = {
   suppliers: (q: string) => api.get<{ data: SupplierSnapshot[] }>('/v1/party/lookups/suppliers', { params: { q } }).then(unwrap),
-  products: (q: string) => api.get<{ data: ProductSnapshot[] }>('/v1/master/lookups/products', { params: { q, status: 'ACTIVE' } }).then(unwrap),
+  /** Active laptop configurations only: a PO line orders an exact configuration. */
+  products: (q: string) => api.get<{ data: ProductSnapshot[] }>('/v1/master/lookups/products', { params: { q, status: 'ACTIVE', laptop: 'true' } }).then(unwrap),
   warehouses: () => api.get<{ data: WarehouseLookup[] }>('/v1/master/warehouses').then(unwrap),
   warehouse: (id: string) => api.get<{ data: WarehouseLookup }>(`/v1/master/warehouses/${id}`).then(unwrap),
   paymentTerms: () => api.get<{ data: PaymentTermLookup[] }>('/v1/master/payment-terms').then(unwrap),

@@ -319,8 +319,14 @@ Rules, all **enforced by the system**:
 - **Lines select a laptop SKU.** Each line picks an existing laptop configuration; its eight
   specifications are shown automatically and are never typed on the order. **A purchase order never
   changes stock**: inventory only moves when goods are received and then pass QC.
-- **Supplier and SKU checks.** Only active suppliers and active laptop configurations can be on an order;
-  the supplier is re-checked when the order is submitted.
+- **What a line records.** Quantity (whole laptops), rate (the purchase price per laptop), monthly
+  rental amount (per laptop per month) and tenure (in months) are all required. The rental amount
+  and tenure are commercial terms of the order; they are not part of the order's purchase total.
+- **One line per configuration.** The same laptop configuration cannot appear on two lines of an
+  order; increase the quantity on its line instead.
+- **Supplier and SKU checks.** Only active suppliers and active laptop configurations of the
+  organisation itself can be on an order (generic products cannot); the supplier is re-checked when
+  the order is submitted.
 - **Prices, tax and totals are fixed at order time.** Each line records the product name, HSN/SAC,
   unit and GST rate as they were when the line was saved. Later master changes never alter an
   order. Totals (taxable value, CGST/SGST or IGST, rounding, grand total) are calculated by the
@@ -328,7 +334,8 @@ Rules, all **enforced by the system**:
 - **Intra-state or inter-state** is decided by the supplier's GST state versus the receiving
   warehouse's state.
 - **Four eyes.** The submitter cannot approve their own order (setting: *Approver must differ*,
-  default on).
+  default on). Administrators (the owner and anyone who can manage settings) are exempt; their
+  self-approval is marked as such in the audit trail.
 - **Approval limit.** An approver can only approve orders up to their organisation's approval limit;
   administrators are exempt (setting: *Approval limit*).
 - **Revisions.** An issued or partially received order can be revised with a reason. Every

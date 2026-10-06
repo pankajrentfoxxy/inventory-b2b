@@ -1,13 +1,23 @@
 import { z } from 'zod';
-import { dateField, optionalDateField, optionalNotes, optionalText, optionalUuid, quantityField, uuidField } from '@b2b/shared';
+import { amountField, dateField, integerField, optionalDateField, optionalNotes, optionalText, optionalUuid, quantityField, uuidField } from '@b2b/shared';
 
+/**
+ * One PO line = one exact laptop configuration (`itemId` is the svc-master laptop product; its
+ * eight specs are resolved and snapshotted server side, never taken from the client).
+ */
 export const poLineSchema = z.object({
   poLineId: z.string().uuid().optional(),
-  itemId: uuidField('Item'),
-  orderedQty: quantityField('Quantity'),
+  itemId: uuidField('Laptop'),
+  /** Laptops are serialized: whole units only. */
+  orderedQty: quantityField('Quantity', { decimals: 0 }),
+  /** Purchase rate per laptop. */
   unitPrice: z.number().finite().min(0),
   /** Overrides the product's default GST rate (e.g. concessional supplies). */
   taxRate: z.number().finite().min(0).max(100).nullish().transform((v) => v ?? null),
+  /** Rental charged per laptop per month; separate from the purchase rate. */
+  monthlyRentalAmount: amountField('Monthly rental amount'),
+  /** Rental tenure in months. */
+  tenureMonths: integerField('Tenure', { allowZero: false, max: 120 }),
 });
 export const poSchema = z.object({
   supplierId: uuidField('Supplier'),

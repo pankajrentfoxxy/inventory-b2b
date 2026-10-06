@@ -9,7 +9,7 @@ import type { PurchaseOrder, ReviseInput } from '../types';
 import { LineSpecs } from './LineSpecs';
 import { ProductPicker } from './pickers';
 import { PoTotals } from './PoTotals';
-import { effectiveTaxRate, emptyLine, lineFromProduct, lineToPayload, previewTotals, type PoLineFormValues } from './poForm.model';
+import { effectiveTaxRate, emptyLine, lineFromProduct, lineToPayload, previewTotals, rentalTermsToForm, type PoLineFormValues } from './poForm.model';
 
 /**
  * Revise an ISSUED / PARTIALLY_RECEIVED order: lines with receipts keep item and price (qty may not
@@ -40,6 +40,7 @@ export function ReviseModal({ po, open, onClose, onRevised }: { po: PurchaseOrde
         defaultTaxRate: l.item.taxRate === null ? '' : String(l.item.taxRate),
         isSerialized: l.item.isSerialized,
         receivedQty: l.receivedQty,
+        ...rentalTermsToForm(l),
       })),
     );
     setReason('');
@@ -99,14 +100,16 @@ export function ReviseModal({ po, open, onClose, onRevised }: { po: PurchaseOrde
         </Field>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm border-collapse">
+          <table className="w-full min-w-[980px] text-sm border-collapse">
             <thead>
               <tr className="text-[11px] uppercase tracking-wider text-slate-500 border-y border-slate-200 bg-slate-50/60">
-                <th className="text-left font-semibold px-3 py-2 w-[38%]">Laptop (SKU)</th>
+                <th className="text-left font-semibold px-3 py-2 w-[30%]">Laptop</th>
                 <th className="text-right font-semibold px-3 py-2">Received</th>
-                <th className="text-right font-semibold px-3 py-2 w-[14%]">Quantity</th>
-                <th className="text-right font-semibold px-3 py-2 w-[16%]">Unit price</th>
-                <th className="text-right font-semibold px-3 py-2 w-[10%]">GST %</th>
+                <th className="text-right font-semibold px-3 py-2 w-[10%]">Quantity</th>
+                <th className="text-right font-semibold px-3 py-2 w-[13%]">Rate</th>
+                <th className="text-right font-semibold px-3 py-2 w-[13%]">Monthly rental</th>
+                <th className="text-right font-semibold px-3 py-2 w-[11%]">Tenure (months)</th>
+                <th className="text-right font-semibold px-3 py-2 w-[8%]">GST %</th>
                 <th className="text-right font-semibold px-3 py-2">Amount</th>
                 <th className="w-9" />
               </tr>
@@ -120,8 +123,9 @@ export function ReviseModal({ po, open, onClose, onRevised }: { po: PurchaseOrde
                     <td className="px-3 py-2">
                       <ProductPicker
                         value={l.itemId}
-                        selectedLabel={l.itemName ? `${l.itemSku ? `${l.itemSku} - ` : ''}${l.itemName}` : undefined}
+                        selectedLabel={l.itemName ? `${l.itemName}${l.itemSku ? ` (${l.itemSku})` : ''}` : undefined}
                         disabled={locked}
+                        excludeIds={lines.filter((x, k) => k !== i && x.itemId).map((x) => x.itemId)}
                         error={Boolean(errors[`lines.${i}.itemId`] || lineErr)}
                         onChange={(id, p) => (p ? update(i, lineFromProduct(p, l)) : update(i, { itemId: id }))}
                         size="sm"
@@ -131,12 +135,20 @@ export function ReviseModal({ po, open, onClose, onRevised }: { po: PurchaseOrde
                     </td>
                     <td className="px-3 py-2 text-right tabular text-slate-600">{locked ? formatQty(l.receivedQty) : <span className="text-slate-300">-</span>}</td>
                     <td className="px-3 py-2">
-                      <Input sanitize="decimal" aria-label="Quantity" className="text-right tabular h-8 text-xs" value={l.orderedQty} onChange={(e) => update(i, { orderedQty: e.target.value })} error={Boolean(errors[`lines.${i}.orderedQty`])} />
+                      <Input sanitize="integer" aria-label="Quantity" className="text-right tabular h-8 text-xs" value={l.orderedQty} onChange={(e) => update(i, { orderedQty: e.target.value })} error={Boolean(errors[`lines.${i}.orderedQty`])} />
                       {errors[`lines.${i}.orderedQty`] ? <p className="text-xs text-red-600 mt-1">{errors[`lines.${i}.orderedQty`]}</p> : locked ? <p className="text-[11px] text-slate-400 mt-1">min {formatQty(l.receivedQty)}</p> : null}
                     </td>
                     <td className="px-3 py-2">
                       <Input sanitize="decimal" aria-label="Unit price" className="text-right tabular h-8 text-xs" value={l.unitPrice} disabled={locked} onChange={(e) => update(i, { unitPrice: e.target.value })} error={Boolean(errors[`lines.${i}.unitPrice`])} />
                       {errors[`lines.${i}.unitPrice`] && <p className="text-xs text-red-600 mt-1">{errors[`lines.${i}.unitPrice`]}</p>}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Input sanitize="decimal" aria-label="Monthly rental" className="text-right tabular h-8 text-xs" value={l.monthlyRentalAmount} onChange={(e) => update(i, { monthlyRentalAmount: e.target.value })} error={Boolean(errors[`lines.${i}.monthlyRentalAmount`])} />
+                      {errors[`lines.${i}.monthlyRentalAmount`] && <p className="text-xs text-red-600 mt-1">{errors[`lines.${i}.monthlyRentalAmount`]}</p>}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Input sanitize="integer" aria-label="Tenure in months" className="text-right tabular h-8 text-xs" value={l.tenureMonths} onChange={(e) => update(i, { tenureMonths: e.target.value })} error={Boolean(errors[`lines.${i}.tenureMonths`])} />
+                      {errors[`lines.${i}.tenureMonths`] && <p className="text-xs text-red-600 mt-1">{errors[`lines.${i}.tenureMonths`]}</p>}
                     </td>
                     <td className="px-3 py-2">
                       <Input sanitize="decimal" aria-label="Tax rate" className="text-right tabular h-8 text-xs" value={l.taxRate} placeholder={l.defaultTaxRate || '0'} onChange={(e) => update(i, { taxRate: e.target.value })} />
@@ -154,7 +166,7 @@ export function ReviseModal({ po, open, onClose, onRevised }: { po: PurchaseOrde
         </div>
         {errors.lines && <p className="text-sm text-red-600">{errors.lines}</p>}
         <Button variant="secondary" size="sm" icon={Plus} onClick={() => setLines((prev) => [...prev, emptyLine()])}>
-          Add line
+          Add laptop
         </Button>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

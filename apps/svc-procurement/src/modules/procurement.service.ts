@@ -31,6 +31,8 @@ type GrnRow = Prisma.GrnGetPayload<{ include: { lines: { include: { serials: tru
 const num = (v: Prisma.Decimal | number | null | undefined) => (v === null || v === undefined ? null : Number(v));
 const n = (v: Prisma.Decimal | number) => Number(v);
 const round3 = (x: number) => Math.round(x * 1000) / 1000;
+/** A line as priced and stored: API input, or an existing line reused by a header-only edit (rental terms may be null on old lines). */
+type LineValues = Omit<PoInput['lines'][number], 'monthlyRentalAmount' | 'tenureMonths'> & { monthlyRentalAmount: number | null; tenureMonths: number | null };
 
 export const PO_STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'ISSUED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CLOSED', 'CANCELLED'] as const;
 export type PoStatus = (typeof PO_STATUSES)[number];
@@ -121,26 +123,42 @@ export class ProcurementService {
     return w;
   }
 
+  /**
+   * Resolves every line's laptop configuration from svc-master (tenant-scoped: another tenant's id
+   * resolves to nothing, exactly like an unknown id). A configuration may appear on one line only,
+   * must be a laptop (carries the eight specs) and must be ACTIVE.
+   */
   private async itemSnapshots(tenantId: string, lines: { itemId: string }[], correlationId: string): Promise<Map<string, ProductSnapshot>> {
-    const ids = [...new Set(lines.map((l) => l.itemId))];
-    const items = await this.sources.master.products(tenantId, ids, correlationId);
+    const firstLine = new Map<string, number>();
+    const duplicates: ErrorDetail[] = [];
+    lines.forEach((l, i) => {
+      const first = firstLine.get(l.itemId);
+      if (first === undefined) firstLine.set(l.itemId, i);
+      else duplicates.push({ path: `lines.${i}.itemId`, message: `This laptop is already on line ${first + 1}; increase the quantity there instead` });
+    });
+    if (duplicates.length) throw businessRuleError('PO_DUPLICATE_LINE', 'The same laptop configuration is on more than one line', duplicates);
+
+    const items = await this.sources.master.products(tenantId, [...firstLine.keys()], correlationId);
     const map = new Map(items.map((i) => [i.id, i]));
+    const notLaptop: ErrorDetail[] = [];
     const problems: ErrorDetail[] = [];
     lines.forEach((l, i) => {
       const item = map.get(l.itemId);
-      if (!item) problems.push({ path: `lines.${i}.itemId`, message: 'Select a valid item' });
+      if (!item) problems.push({ path: `lines.${i}.itemId`, message: 'Select a valid laptop' });
+      else if (!item.specs) notLaptop.push({ path: `lines.${i}.itemId`, message: `${item.sku} is not a laptop configuration` });
       else if (item.status !== 'ACTIVE') problems.push({ path: `lines.${i}.itemId`, message: `${item.sku} is ${item.status.toLowerCase()}` });
     });
-    if (problems.length) throw businessRuleError('PO_ITEM_INACTIVE', 'One or more items cannot be ordered', problems);
+    if (notLaptop.length) throw businessRuleError('PO_ITEM_NOT_LAPTOP', 'Purchase orders can only order laptop configurations', notLaptop);
+    if (problems.length) throw businessRuleError('PO_ITEM_INACTIVE', 'One or more laptops cannot be ordered', problems);
     return map;
   }
 
-  private computeTotals(lines: PoInput['lines'], items: Map<string, ProductSnapshot>, discountType: 'PERCENT' | 'AMOUNT', discountValue: number, intraState: boolean) {
+  private computeTotals(lines: LineValues[], items: Map<string, ProductSnapshot>, discountType: 'PERCENT' | 'AMOUNT', discountValue: number, intraState: boolean) {
     const totals = computePurchaseOrderTotals({
       lines: lines.map((l) => ({ quantity: l.orderedQty, rate: l.unitPrice, taxRate: l.taxRate ?? items.get(l.itemId)?.taxRate ?? 0 })),
       discountType, discountValue, taxDeductionType: 'NONE', taxDeductionRate: 0, adjustment: 0, intraState,
     });
-    return { totals, lineRows: lines.map((l, i) => ({ itemId: l.itemId, itemSnapshot: items.get(l.itemId) as unknown as Prisma.InputJsonValue, orderedQty: l.orderedQty, unitPrice: l.unitPrice, taxRate: totals.lines[i].taxRate, taxableAmount: totals.lines[i].taxableAmount, taxAmount: totals.lines[i].taxAmount, lineTotal: totals.lines[i].total })) };
+    return { totals, lineRows: lines.map((l, i) => ({ itemId: l.itemId, itemSnapshot: items.get(l.itemId) as unknown as Prisma.InputJsonValue, orderedQty: l.orderedQty, unitPrice: l.unitPrice, taxRate: totals.lines[i].taxRate, taxableAmount: totals.lines[i].taxableAmount, taxAmount: totals.lines[i].taxAmount, lineTotal: totals.lines[i].total, monthlyRentalAmount: l.monthlyRentalAmount, tenureMonths: l.tenureMonths })) };
   }
 
   private intraState(supplier: PartySnapshot, warehouse: WarehouseSnapshot): boolean {
@@ -201,7 +219,7 @@ export class ProcurementService {
     if (expectedVersion !== null && expectedVersion !== current.version) throw conflict('The purchase order was modified by someone else. Reload and try again.', 'VERSION_CONFLICT');
     const supplier = patch.supplierId && patch.supplierId !== current.supplierId ? await this.supplierSnapshot(tenantId, patch.supplierId, actor.correlationId) : (current.supplierSnapshot as unknown as PartySnapshot);
     const warehouse = patch.shipToWarehouseId && patch.shipToWarehouseId !== current.shipToWarehouseId ? await this.warehouseSnapshot(ctx, patch.shipToWarehouseId, null) : (current.shipToSnapshot as unknown as WarehouseSnapshot);
-    const lines: PoInput['lines'] = patch.lines ?? current.lines.map((l) => ({ itemId: l.itemId, orderedQty: n(l.orderedQty), unitPrice: n(l.unitPrice), taxRate: n(l.taxRate) }));
+    const lines: LineValues[] = patch.lines ?? current.lines.map((l) => ({ itemId: l.itemId, orderedQty: n(l.orderedQty), unitPrice: n(l.unitPrice), taxRate: n(l.taxRate), monthlyRentalAmount: num(l.monthlyRentalAmount), tenureMonths: l.tenureMonths }));
     const items = patch.lines ? await this.itemSnapshots(tenantId, lines, actor.correlationId) : new Map(current.lines.map((l) => [l.itemId, l.itemSnapshot as unknown as ProductSnapshot]));
     const discountType = patch.discountType ?? (current.discountType as 'PERCENT' | 'AMOUNT');
     const discountValue = patch.discountValue ?? n(current.discountValue);
@@ -246,6 +264,7 @@ export class ProcurementService {
       const data: Prisma.PurchaseOrderUpdateInput = { version: { increment: 1 } };
       let eventType: string;
       let auditAction: string;
+      let selfApproved = false;
       switch (command) {
         case 'submit': {
           if (!po.lines.length) throw businessRuleError('PO_INVALID_TRANSITION', 'Add at least one line before submitting', [{ path: 'lines', message: 'At least one line is required' }]);
@@ -256,7 +275,12 @@ export class ProcurementService {
           break;
         }
         case 'approve': {
-          if (settings.approverMustDiffer && actor.userId && (po.submittedBy === actor.userId || (!po.submittedBy && po.createdBy === actor.userId))) throw conflict('The person who submitted a purchase order cannot approve it', 'PO_SELF_APPROVAL');
+          // Four eyes: the submitter cannot approve, except administrators (settings.manage, i.e. owner /
+          // admin), who are trusted like for the approval limit; their self-approval is flagged in the audit.
+          const ownOrder = Boolean(actor.userId && (po.submittedBy === actor.userId || (!po.submittedBy && po.createdBy === actor.userId)));
+          const isAdmin = ctx.permissions.has('settings.manage');
+          if (settings.approverMustDiffer && ownOrder && !isAdmin) throw conflict('The person who submitted a purchase order cannot approve it', 'PO_SELF_APPROVAL');
+          selfApproved = settings.approverMustDiffer && ownOrder;
           if (settings.approvalLimit !== null && n(po.total) > settings.approvalLimit && !ctx.permissions.has('settings.manage')) throw forbidden(`Purchase orders above ${settings.approvalLimit} need an administrator's approval`, 'PO_APPROVAL_LIMIT');
           await tx.poApproval.create({ data: { id: uuidv7(), tenantId, poId: id, revision: po.revision, decision: 'APPROVED', actorId: actor.userId ?? SYSTEM_USER, comment: body.comment ?? null } });
           Object.assign(data, { status: 'APPROVED', approvedBy: actor.userId, approvedAt: new Date(), statusReason: null });
@@ -306,7 +330,7 @@ export class ProcurementService {
       }
       await tx.purchaseOrder.update({ where: { id }, data });
       const updated = await this.load(tx, id);
-      await this.audit(tx, tenantId, actor, { action: auditAction, entityType: 'PURCHASE_ORDER', entityId: id, summary: `${po.number}: ${previous} -> ${updated.status}`, oldValue: { status: previous }, newValue: { status: updated.status, reason: body.reason ?? body.comment ?? null }, version: updated.version });
+      await this.audit(tx, tenantId, actor, { action: auditAction, entityType: 'PURCHASE_ORDER', entityId: id, summary: `${po.number}: ${previous} -> ${updated.status}${selfApproved ? ' (self-approved by an administrator)' : ''}`, oldValue: { status: previous }, newValue: { status: updated.status, reason: body.reason ?? body.comment ?? null, ...(selfApproved ? { selfApproved: true } : {}) }, version: updated.version });
       await this.emitPo(tx, tenantId, updated, eventType, actor, previous, body.reason ?? null);
       return this.poView(updated);
     });
@@ -351,7 +375,7 @@ export class ProcurementService {
       const keep = new Set(input.lines.map((l) => l.poLineId).filter(Boolean));
       await tx.poLine.deleteMany({ where: { poId: id, id: { notIn: [...keep] as string[] } } });
       for (const [i, l] of input.lines.entries()) {
-        const row = { itemId: lineRows[i].itemId, itemSnapshot: lineRows[i].itemSnapshot, orderedQty: l.orderedQty, unitPrice: l.unitPrice, taxRate: lineRows[i].taxRate, taxableAmount: lineRows[i].taxableAmount, taxAmount: lineRows[i].taxAmount, lineTotal: lineRows[i].lineTotal, lineNo: i + 1 };
+        const row = { itemId: lineRows[i].itemId, itemSnapshot: lineRows[i].itemSnapshot, orderedQty: l.orderedQty, unitPrice: l.unitPrice, taxRate: lineRows[i].taxRate, taxableAmount: lineRows[i].taxableAmount, taxAmount: lineRows[i].taxAmount, lineTotal: lineRows[i].lineTotal, monthlyRentalAmount: l.monthlyRentalAmount, tenureMonths: l.tenureMonths, lineNo: i + 1 };
         if (l.poLineId && po.lines.some((x) => x.id === l.poLineId)) await tx.poLine.update({ where: { id: l.poLineId }, data: { ...row, lineNo: 1000 + i } });
         else await tx.poLine.create({ data: { id: uuidv7(), tenantId, poId: id, ...row, lineNo: 1000 + i } });
       }
@@ -373,7 +397,7 @@ export class ProcurementService {
       orderDate: po.orderDate, expectedDate: po.expectedDate, paymentTermId: po.paymentTermId, currency: po.currency, discountType: po.discountType, discountValue: n(po.discountValue), intraState: po.intraState,
       subtotal: n(po.subtotal), discountAmount: n(po.discountAmount), taxTotal: n(po.taxTotal), taxBreakup: po.taxBreakup, total: n(po.total),
       notes: po.notes, terms: po.terms, createdBy: po.createdBy, submittedBy: po.submittedBy, submittedAt: po.submittedAt, approvedBy: po.approvedBy, approvedAt: po.approvedAt, issuedAt: po.issuedAt, cancelledAt: po.cancelledAt, closedAt: po.closedAt, createdAt: po.createdAt, updatedAt: po.updatedAt, version: po.version,
-      lines: [...po.lines].sort((a, b) => a.lineNo - b.lineNo).map((l) => ({ id: l.id, lineNo: l.lineNo, itemId: l.itemId, item: l.itemSnapshot, orderedQty: n(l.orderedQty), receivedQty: n(l.receivedQty), cancelledQty: n(l.cancelledQty), remainingQty: round3(n(l.orderedQty) - n(l.receivedQty) - n(l.cancelledQty)), unitPrice: n(l.unitPrice), taxRate: n(l.taxRate), taxableAmount: n(l.taxableAmount), taxAmount: n(l.taxAmount), lineTotal: n(l.lineTotal) })),
+      lines: [...po.lines].sort((a, b) => a.lineNo - b.lineNo).map((l) => ({ id: l.id, lineNo: l.lineNo, itemId: l.itemId, item: l.itemSnapshot, orderedQty: n(l.orderedQty), receivedQty: n(l.receivedQty), cancelledQty: n(l.cancelledQty), remainingQty: round3(n(l.orderedQty) - n(l.receivedQty) - n(l.cancelledQty)), unitPrice: n(l.unitPrice), taxRate: n(l.taxRate), taxableAmount: n(l.taxableAmount), taxAmount: n(l.taxAmount), lineTotal: n(l.lineTotal), monthlyRentalAmount: num(l.monthlyRentalAmount), tenureMonths: l.tenureMonths })),
     };
   }
 
